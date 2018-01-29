@@ -4,16 +4,17 @@ import os
 import tensorflow as tf
 from google.protobuf.json_format import MessageToJson
 
+LOC = os.path.join('home', 'anshuman14021', 'IRP', 'data', 'yt8m_video_level')
+
 def generator(protobuf_records, which_generator, batch_size):
-	loc = os.path.join('home', 'anshuman14021', 'IRP', 'data', 'yt8m_video_level')
-	protobuf_records = filter(lambda x: 'tfrecord' in x, os.listdir(loc))
+	protobuf_records = filter(lambda x: 'tfrecord' in x, os.listdir(LOC))
 	if (which_generator == 1):
 		protobuf_records = filter(lambda x: 'train' in x, protobuf_records)
 	elif (which_generator == 2):
 		protobuf_records = filter(lambda x: 'test' in x, protobuf_records)
 	elif (which_generator == 3):
 		protobuf_records = filter(lambda x: 'validate' in x, protobuf_records)
-	protobuf_records = map(lambda x: os.path.join(loc, x), protobuf_records)
+	protobuf_records = map(lambda x: os.path.join(LOC, x), protobuf_records)
 	i = 0
 	while True:
 		i %= batch_size

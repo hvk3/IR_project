@@ -49,7 +49,7 @@ def get_authenticated_service(args):
     return build_from_document(doc, http=credentials.authorize(httplib2.Http()))
 
 
-def list_captions(youtube, video_id):
+def list_captions(youtube, video_id, reqd_language='en'):
   results = youtube.captions().list(
     part="snippet",
     videoId=video_id
@@ -59,9 +59,9 @@ def list_captions(youtube, video_id):
     id = item["id"]
     name = item["snippet"]["name"]
     language = item["snippet"]["language"]
-    print "Caption track '%s(%s)' in '%s' language." % (name, id, language)
-
-  return results["items"]
+    if language == reqd_language:
+        return id
+  return None
 
 
 def download_caption(youtube, caption_id, tfmt):
@@ -126,14 +126,8 @@ if __name__ == "__main__":
     help="Required; ID for video for which the caption track will be uploaded.")
   # The "name" option specifies the name of the caption trackto be used.
   argparser.add_argument("--name", help="Caption track name", default="YouTube for Developers")
-  # The "file" option specifies the binary file to be uploaded as a caption track.
-  argparser.add_argument("--file", help="Captions track file to upload")
   # The "language" option specifies the language of the caption track to be uploaded.
   argparser.add_argument("--language", help="Caption track language", default="en")
-  # The "captionid" option specifies the ID of the caption track to be processed.
-  argparser.add_argument("--captionid", help="Required; ID of the caption track to be processed")
-  # The "action" option specifies the action to be processed.
-  argparser.add_argument("--action", help="Action", default="all")
   args = argparser.parse_args()
 
   youtube = get_authenticated_service(args)
@@ -147,9 +141,10 @@ if __name__ == "__main__":
   title, channelTitle, categoryId, description, tags, statistics = \
     get_stats(youtube, args.videoid)
 
-  # Captions
+  # Almost always unavailable:
   try:
-      list_captions(youtube, args.videoid)
-      download_caption(youtube, args.captionid, 'srt')
+      captionid = list_captions(youtube, args.videoid, args.language)
+      if captionid:
+          download_caption(youtube, captionid, 'srt')
   except HttpError, e:
     print "An HTTP error %d occurred:\n%s" % (e.resp.status, e.content)
