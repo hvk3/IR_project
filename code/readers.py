@@ -127,4 +127,3 @@ class YT8MAggregatedFeatureReader(BaseReader):
         features[feature_name] for feature_name in self.feature_names], 1)
 
     return features["video_id"], concatenated_features, labels, tf.ones([tf.shape(serialized_examples)[0]])
-
