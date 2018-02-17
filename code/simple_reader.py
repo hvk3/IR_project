@@ -4,6 +4,7 @@ import os
 import base64
 import tensorflow as tf
 from google.protobuf.json_format import MessageToJson
+from gensim.models import doc2vec
 
 
 def extract_relevant_info(json_parsed_record, which_generator):
@@ -45,9 +46,64 @@ def generator(location, which_generator, batch_size):
 		yield np.array(json_parsed_records)
 
 
-if __name__ == "__main__":
-	location = '/home/anshumans/Desktop/Studies/IR/IR_project/data/dummydata'
-	gen = generator(location, 1, 1)
-	arr = gen.next()
-	print arr[0]
 
+def rankAndSelectComments(comments, select):
+	likes = []
+	for comment in comments:
+		likes.append(int(comment['likes']))
+	sortedByLikes = np.argsort(likes)[::-1]
+	selectedComments = []
+	for i in range(len(sortedByLikes)):
+		selectedComments.append(comments[sortedByLikes[i]]['comment'])
+	return selectedComments[:select]	
+
+
+def mongoDBgenerator(collection, d2vmodel, numComments, which, batch_size):
+	while True:
+		i = 0
+		X = []
+		Y = []
+		for record in collection.find():
+			if record['metadata']['which'] == which:
+				record_X = []
+				record_Y = []
+				metadata = record['metadata']['metadata']['statistics']
+				metadata_records = [ metadata['commentCount'], metadata['viewCount'], metadata['favoriteCount'], metadata['dislikeCount'], metadata['likeCount'], record['metadata']['metadata']['categoryId']]
+				metadata_records = [int(x) for x in metadata_records]
+				record_X = metadata_records
+				# Add metadata to training data point
+				audio_data = record['avdata']['mean_audio']
+				record_X += audio_data
+				# Add audio features
+				video_data = record['avdata']['mean_rgb']
+				record_X += video_data
+				# Add video features
+				description = d2vmodel.infer_vector(record['metadata']['metadata']['description'].split(' '))
+				record_X += [description]
+				# Add description features
+				selectedComments = rankAndSelectComments(record['metadata']['metadata']['comments'], numComments)				
+				vectorComments = [d2vmodel.infer_vector(x.split(' ')) for x in selectedComments]
+				record_X += vectorComments
+				# Add comment based features
+				channelTitle = d2vmodel.infer_vector(record['metadata']['metadata']['channelTitle'].split(' '))
+				record_X += [channelTitle]
+				# Add channel title features
+				record_Y = d2vmodel.infer_vector(record['metadata']['metadata']['title'].split(' '))
+				X.append(record_X)
+				Y.append(record_Y)
+				if len(Y) == batch_size:
+					yield np.array(X), np.array(Y)
+					X = []
+					Y = []
+
+
+if __name__ == "__main__":
+	from pymongo import MongoClient
+	client = MongoClient()
+	db = client.youtube8m
+	ds = db.iteration2
+	d2v = doc2vec.Doc2Vec.load('doc2vec_100.model')
+	gen = mongoDBgenerator(ds, d2v, 2, 1, 16) 
+	x, y = gen.next()
+	print x.shape, y.shape
+	print x
