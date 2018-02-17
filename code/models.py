@@ -1,5 +1,6 @@
 from keras.layers import Input, Dense, Concatenate
 from keras.optimizers import Adadelta
+from keras.models import Model
 
 
 def no_sent2vec_training_model(EMBEDDING_SIZE, NUM_COMMENTS):
@@ -20,12 +21,13 @@ def no_sent2vec_training_model(EMBEDDING_SIZE, NUM_COMMENTS):
 
     # Text-based features
     input_description = Input(shape=(EMBEDDING_SIZE,))
-    input_comments = Concatenate()([ Input(shape=(EMBEDDING_SIZE,)) for _ in range(NUM_COMMENTS)])
+    input_comments = [ Input(shape=(EMBEDDING_SIZE,)) for _ in range(NUM_COMMENTS) ]
+    concat_input_comments = Concatenate()(input_comments)
     input_channelName = Input(shape=(EMBEDDING_SIZE,))
 
     dense1_description = Dense(EMBEDDING_SIZE/2, activation='relu')(input_description)
-    dense1_comments = Dense(NUM_COMMENTS/2 * EMBEDDING_SIZE/2, activation='relu')(input_comments)
-    dense1_channelName = DenseConcatenate()(EMBEDDING_SIZE/2, activation='relu')(input_channelName)
+    dense1_comments = Dense(NUM_COMMENTS/2 * EMBEDDING_SIZE/2, activation='relu')(concat_input_comments)
+    dense1_channelName = Dense(EMBEDDING_SIZE/2, activation='relu')(input_channelName)
     input_alltextual = Concatenate()([dense1_description, dense1_comments, dense1_channelName])
     dense2_alltextual = Dense(NUM_COMMENTS/4 * EMBEDDING_SIZE/4)(input_alltextual)
 
@@ -41,8 +43,13 @@ def no_sent2vec_training_model(EMBEDDING_SIZE, NUM_COMMENTS):
     model_inputs += [input_channelName]
 
     # Define loss, compile model
-    model = keras.models.Model(inputs=model_inputs, outputs=model_output)
+    model = Model(inputs=model_inputs, outputs=model_output)
     opt = Adadelta(lr=1)
     model.compile(loss='mean_squared_error', optimizer=opt)
 
     return model
+
+
+if __name__ == "__main__":
+	model = no_sent2vec_training_model(100, 2)
+	print model.inputs

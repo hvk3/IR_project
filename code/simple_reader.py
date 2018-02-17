@@ -46,7 +46,6 @@ def generator(location, which_generator, batch_size):
 		yield np.array(json_parsed_records)
 
 
-
 def rankAndSelectComments(comments, select):
 	likes = []
 	for comment in comments:
@@ -58,43 +57,58 @@ def rankAndSelectComments(comments, select):
 	return selectedComments[:select]	
 
 
+def filled_metadata(metadata):
+	commentCount =  metadata.get('commentCount', 0)
+	viewCount = metadata.get('viewCount', 0)
+	favoriteCount =  metadata.get('favoriteCount', 0)
+	dislikeCount = metadata.get('dislikeCount', 0)
+	likeCount = metadata.get('likeCount', 0)
+	return [commentCount, viewCount, favoriteCount, dislikeCount, likeCount]
+
+	
 def mongoDBgenerator(collection, d2vmodel, numComments, which, batch_size):
 	while True:
 		i = 0
-		X = []
+		X_metadata = []
+		X_audio = []
+		X_video = []
+		X_desc = []
+		X_comments = [ [] for _ in range(numComments)]
+		X_channel = []
 		Y = []
 		for record in collection.find():
 			if record['metadata']['which'] == which:
-				record_X = []
-				record_Y = []
 				metadata = record['metadata']['metadata']['statistics']
-				metadata_records = [ metadata['commentCount'], metadata['viewCount'], metadata['favoriteCount'], metadata['dislikeCount'], metadata['likeCount'], record['metadata']['metadata']['categoryId']]
-				metadata_records = [int(x) for x in metadata_records]
-				record_X = metadata_records
+				if len(record['metadata']['metadata']['comments']) < numComments:
+					continue
+				metadata_records = filled_metadata(metadata) + [record['metadata']['metadata']['categoryId']]
+				metadata_records = np.array([int(x) for x in metadata_records])
+				X_metadata.append(metadata_records)
 				# Add metadata to training data point
 				audio_data = record['avdata']['mean_audio']
-				record_X += audio_data
+				X_audio.append(audio_data)
 				# Add audio features
 				video_data = record['avdata']['mean_rgb']
-				record_X += video_data
+				X_video.append(video_data)
 				# Add video features
 				description = d2vmodel.infer_vector(record['metadata']['metadata']['description'].split(' '))
-				record_X += [description]
+				X_desc.append(description)
 				# Add description features
-				selectedComments = rankAndSelectComments(record['metadata']['metadata']['comments'], numComments)				
-				vectorComments = [d2vmodel.infer_vector(x.split(' ')) for x in selectedComments]
-				record_X += vectorComments
+				selectedComments = rankAndSelectComments(record['metadata']['metadata']['comments'], numComments)
+				for i in range(numComments):
+					X_comments[i].append(d2vmodel.infer_vector(selectedComments[i].split(' ')))				
 				# Add comment based features
 				channelTitle = d2vmodel.infer_vector(record['metadata']['metadata']['channelTitle'].split(' '))
-				record_X += [channelTitle]
+				X_channel.append(channelTitle)
 				# Add channel title features
-				record_Y = d2vmodel.infer_vector(record['metadata']['metadata']['title'].split(' '))
-				X.append(record_X)
-				Y.append(record_Y)
+				Y.append(d2vmodel.infer_vector(record['metadata']['metadata']['title'].split(' ')))
 				if len(Y) == batch_size:
-					yield np.array(X), np.array(Y)
-					X = []
-					Y = []
+					X = [np.array(X_metadata), np.array(X_audio), np.array(X_video), np.array(X_desc)]
+					X += [ np.array(commentVec) for commentVec in X_comments ]
+					X.append(np.array(X_channel))
+					yield X, np.array(Y)
+					X_metadata, X_audio, X_video, X_desc, X_channel = [], [], [], [], []
+					Y, X_comments = [], [ [] for _ in range(numComments) ]
 
 
 if __name__ == "__main__":
