@@ -9,7 +9,10 @@ from gensim.models import doc2vec
 
 def extract_relevant_info(json_parsed_record, which_generator):
 	video_id = base64.b64decode(json_parsed_record['features']['feature']['video_id']['bytesList']['value'][0])
-	labels = json_parsed_record['features']['feature']['labels']['int64List']['value']
+	try:
+		labels = json_parsed_record['features']['feature']['labels']['int64List']['value']
+	except:
+		labels = []
 	mean_audio = json_parsed_record['features']['feature']['mean_audio']['floatList']['value']
 	mean_rgb = json_parsed_record['features']['feature']['mean_rgb']['floatList']['value']
 	parsed_record = {
@@ -32,6 +35,7 @@ def generator(location, which_generator, batch_size):
 		protobuf_records = filter(lambda x: 'validate' in x, protobuf_records)
 	protobuf_records = map(lambda x: os.path.join(location, x), protobuf_records)
 	i = 0
+	print len(protobuf_records),"entries found"
 	for j in range(len(protobuf_records) // batch_size):
 		print j, "out of", len(protobuf_records) // batch_size, "done"
 		i %= batch_size

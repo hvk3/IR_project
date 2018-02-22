@@ -20,12 +20,14 @@ FLAGS = flags.FLAGS
 flags.DEFINE_integer('numComments', 3, 'Number of comments ot be consideredwhile building and training model')
 flags.DEFINE_integer('batchSize', 16, 'Batch size')
 flags.DEFINE_integer('numEpochs', 50, 'Number of epochs')
+flags.DEFINE_boolean('add_batch_norm', False, 'Add batch normalization to model?')
+flags.DEFINE_boolean('add_dropout', False, 'Add dropout to model?')
 
 
 if __name__ == "__main__":
 	embeddingSize = 100
 	# Define model
-	model = models.no_sent2vec_training_model(embeddingSize, FLAGS.numComments)
+	model = models.no_sent2vec_training_model(embeddingSize, FLAGS.numComments, FLAGS.add_batch_norm, FLAGS.add_dropout)
 	# Visualize model
 	plot_model(model, to_file='model_arch.png')
 	client = MongoClient()
@@ -36,3 +38,4 @@ if __name__ == "__main__":
 	generator = simple_reader.mongoDBgenerator(collection, d2v, FLAGS.numComments, 1, FLAGS.batchSize)
 	# Train model
 	model.fit_generator(generator, steps_per_epoch=1000, epochs=FLAGS.numEpochs)
+

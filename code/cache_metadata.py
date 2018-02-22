@@ -36,8 +36,10 @@ def populate_data(location, which_generator):
                         else:
                                 continue
                 except Exception, e:
+			print e
                         continue
         except Exception, e:
+	    print e
             break
 
 if __name__ == "__main__":
