@@ -1,12 +1,14 @@
 from gensim.models import doc2vec
 from pymongo import MongoClient
 
+
 class LabeledLineSentence(object):
 	def __init__(self, filename):
 		self.filename = filename
 	def __iter__(self):
 		for uid, line in enumerate(open(self.filename)):
 			yield doc2vec.LabeledSentence(words=line.split(), labels=['SENT_%s' % uid])
+
 
 def get_batches_from_collection(collection_, batch_size = 16):
 	items = collection_.find()
@@ -18,6 +20,7 @@ def get_batches_from_collection(collection_, batch_size = 16):
 		i += 1
 		print(i)
 		yield items_batch
+
 
 if __name__ == '__main__':
 	client = MongoClient()
