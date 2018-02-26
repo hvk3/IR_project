@@ -44,4 +44,4 @@ def populate_data(location, which_generator):
 
 if __name__ == "__main__":
     import sys
-    populate_data(sys.argv[1], 1)
+    populate_data(sys.argv[1], 2)
