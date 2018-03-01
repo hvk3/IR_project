@@ -28,7 +28,7 @@ flags.DEFINE_boolean('add_dropout', False, 'Add dropout to model?')
 if __name__ == "__main__":
 	embeddingSize = 100
 	# Define model
-	model = models.no_sent2vec_training_model(embeddingSize, FLAGS.numComments, FLAGS.add_batch_norm, FLAGS.add_dropout)
+	model = models.no_sent2vec_model(embeddingSize, FLAGS.numComments, FLAGS.add_batch_norm, FLAGS.add_dropout)
 	# Visualize model
 	plot_model(model, to_file='model_arch.png')
 	client = MongoClient()
