@@ -3,6 +3,7 @@ from pymongo import MongoClient
 import get_video_info
 import simple_reader
 
+
 def populate_data(location, which_generator):
     # Set up mongoDB
     client = MongoClient()
@@ -41,6 +42,7 @@ def populate_data(location, which_generator):
         except Exception, e:
 	    print e
             break
+
 
 if __name__ == "__main__":
     import sys

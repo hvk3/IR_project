@@ -1,5 +1,6 @@
 import json
 import numpy as np
+from itertools import tee
 import os
 import base64
 import tensorflow as tf
@@ -35,9 +36,8 @@ def generator(location, which_generator, batch_size):
 		protobuf_records = filter(lambda x: 'validate' in x, protobuf_records)
 	protobuf_records = map(lambda x: os.path.join(location, x), protobuf_records)
 	i = 0
-	print len(protobuf_records),"entries found"
 	for j in range(len(protobuf_records) // batch_size):
-		print j, "out of", len(protobuf_records) // batch_size, "done"
+		print(j, "out of", len(protobuf_records) // batch_size, "done")
 		i %= batch_size
 		json_parsed_records = []
 		for record in protobuf_records[i * batch_size : (i + 1) * batch_size]:
@@ -70,8 +70,9 @@ def filled_metadata(metadata):
 	return [commentCount, viewCount, favoriteCount, dislikeCount, likeCount]
 
 	
-def mongoDBgenerator(collection, d2vmodel, numComments, which, batch_size, use_audio=True, use_video=True
+def mongoDBgenerator(collection, d2vmodel, numComments, which, batch_size, validation_ratio=0.2, use_audio=True, use_video=True
 		, use_desc=True, use_metadata=True, use_comments=True, use_channel=True):
+	print("Found", collection.find({"which":which}).count(), "records")
 	while True:
 		i = 0
 		X_metadata = []
@@ -81,50 +82,68 @@ def mongoDBgenerator(collection, d2vmodel, numComments, which, batch_size, use_a
 		X_comments = [ [] for _ in range(numComments)]
 		X_channel = []
 		Y = []
-		for record in collection.find():
-			if record['metadata']['which'] == which:
-				metadata = record['metadata']['metadata']['statistics']
-				if len(record['metadata']['metadata']['comments']) < numComments:
-					continue
-				metadata_records = filled_metadata(metadata) + [record['metadata']['metadata']['categoryId']]
-				metadata_records = np.array([int(x) for x in metadata_records])
-				X_metadata.append(metadata_records)
-				# Add metadata to training data point
-				audio_data = record['avdata']['mean_audio']
-				X_audio.append(audio_data)
-				# Add audio features
-				video_data = record['avdata']['mean_rgb']
-				X_video.append(video_data)
-				# Add video features
-				description = d2vmodel.infer_vector(record['metadata']['metadata']['description'].split(' '))
-				X_desc.append(description)
-				# Add description features
-				selectedComments = rankAndSelectComments(record['metadata']['metadata']['comments'], numComments)
-				for i in range(numComments):
-					X_comments[i].append(d2vmodel.infer_vector(selectedComments[i].split(' ')))
-				# Add comment based features
-				channelTitle = d2vmodel.infer_vector(record['metadata']['metadata']['channelTitle'].split(' '))
-				X_channel.append(channelTitle)
-				# Add channel title features
-				Y.append(d2vmodel.infer_vector(record['metadata']['metadata']['title'].split(' ')))
-				if len(Y) == batch_size:
-					X = []
-					if (use_metadata):
-						X.append(np.array(X_metadata))
-					if (use_audio):
-						X.append(np.array(X_audio))
-					if (use_video):
-						X.append(np.array(X_video))
-					if (use_desc):
-						X.append(np.array(X_desc))
-					# X = [np.array(X_metadata), np.array(X_audio), np.array(X_video), np.array(X_desc)]
-					if (use_comments):
-						X += [ np.array(commentVec) for commentVec in X_comments ]
-					if (use_channel):
-						X.append(np.array(X_channel))
-					yield X, np.array(Y)
-					X_metadata, X_audio, X_video, X_desc, X_channel = [], [], [], [], []
-					Y, X_comments = [], [ [] for _ in range(numComments) ]
+		for record in collection.find({'which': which}):
+			metadata = record['metadata']['metadata']['statistics']
+			if len(record['metadata']['metadata']['comments']) < numComments:
+				continue
+			metadata_records = filled_metadata(metadata) + [record['metadata']['metadata']['categoryId']]
+			metadata_records = np.array([int(x) for x in metadata_records])
+			X_metadata.append(metadata_records)
+			# Add metadata to training data point
+			audio_data = record['avdata']['mean_audio']
+			X_audio.append(audio_data)
+			# Add audio features
+			video_data = record['avdata']['mean_rgb']
+			X_video.append(video_data)
+			# Add video features
+			description = d2vmodel.infer_vector(record['metadata']['metadata']['description'].split(' '))
+			X_desc.append(description)
+			# Add description features
+			selectedComments = rankAndSelectComments(record['metadata']['metadata']['comments'], numComments)
+			for i in range(numComments):
+				X_comments[i].append(d2vmodel.infer_vector(selectedComments[i].split(' ')))
+			# Add comment based features
+			channelTitle = d2vmodel.infer_vector(record['metadata']['metadata']['channelTitle'].split(' '))
+			X_channel.append(channelTitle)
+			# Add channel title features
+			Y.append(d2vmodel.infer_vector(record['metadata']['metadata']['title'].split(' ')))
+			if len(Y) == batch_size:
+				X = []
+				if (use_metadata):
+					X.append(np.array(X_metadata))
+				if (use_audio):
+					X.append(np.array(X_audio))
+				if (use_video):
+					X.append(np.array(X_video))
+				if (use_desc):
+					X.append(np.array(X_desc))
+				if (use_comments):
+					X += [ np.array(commentVec) for commentVec in X_comments ]
+				if (use_channel):
+					X.append(np.array(X_channel))
+				Y = np.array(Y)
+				# Split into train and validation if training
+				if which == 1:
+					splitPoint = int(validation_ratio * len(Y))
+					X_train = [ x[splitPoint:] for x in X]
+					X_val = [ x[:splitPoint] for x in X]
+					yield (X_train, Y[splitPoint:]), (X_val, Y[:splitPoint])
+				else:
+					yield X, Y
+				X_metadata, X_audio, X_video, X_desc, X_channel = [], [], [], [], []
+				Y, X_comments = [], [ [] for _ in range(numComments) ]
+		# Don't loop indefinitely if test data
+		if which != 1:
+			break
+
+
+def getTrainValGens(sourceGen, train=True):
+	if train:
+		for tuple in sourceGen:
+			yield tuple[0]
+	else:
+		for tuple in sourceGen:
+			yield tuple[1]
 
 
 if __name__ == "__main__":
@@ -136,4 +155,3 @@ if __name__ == "__main__":
 	gen = mongoDBgenerator(ds, d2v, 2, 1, 16) 
 	x, y = gen.next()
 	print x.shape, y.shape
-	print x

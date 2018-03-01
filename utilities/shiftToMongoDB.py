@@ -11,7 +11,7 @@ LOC = '/home/anshuman14021/IRP/data/yt8m_video_level'
 client = pymongo.MongoClient()
 db = client.youtube8m
 ds = db.iteration1
-ds2 = db.iteration2
+ds2 = db.iteration3
 
 
 def extract_relevant_info(json_parsed_record, which_generator):
@@ -48,6 +48,7 @@ def cache_everything(which_generator):
                     ds2.insert_one({
                         "metadata": ds.find_one({'_id': videoInfo['video_id']})
                         ,"avdata": videoInfo
+			,"which": ds.find_one({'_id': videoInfo['video_id']})['which']
                     })
                     i += 1
                     if i == ds.find().count():
@@ -58,4 +59,4 @@ def cache_everything(which_generator):
 
 
 if __name__ == "__main__":
-    gen = cache_everything(1)
+    gen = cache_everything(3)
