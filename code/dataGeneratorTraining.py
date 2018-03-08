@@ -13,13 +13,6 @@ db = client.youtube8m
 ds = db.iteration1
 
 
-# dataKeys = db.iteration1.find({})
-
-# for key in dataKeys:
-#        print key
-#       # print type(key)
-# print " printed keys"
-
 def extract_relevant_info(json_parsed_record):
         video_id = json_parsed_record['features']['feature']['video_id']['bytesList']['value'][0]
         labels = json_parsed_record['features']['feature']['labels']['int64List']['value']
@@ -70,5 +63,5 @@ if __name__ == "__main__":
         gen = generator(1, 1)
         arr = gen.next()
 
-# print the number of documents in a collection
-print db.iteration1.count()
+	# print the number of documents in a collection
+	print db.iteration1.count()
