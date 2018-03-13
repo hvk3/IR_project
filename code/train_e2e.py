@@ -33,7 +33,7 @@ flags.DEFINE_boolean('vec2doc', False, 'Train on text, instead of doc2vec featur
 
 
 if __name__ == "__main__":
-	embeddingSize = 100
+	embeddingSize = 400
 	# Define model
 	if FLAGS.no_metadata:
 		model = models.no_metadata_model(embeddingSize, FLAGS.numComments, FLAGS.add_batch_norm, FLAGS.add_dropout)
@@ -48,7 +48,8 @@ if __name__ == "__main__":
 	elif FLAGS.numComments == 0:
 		model = models.no_comments_model(embeddingSize, FLAGS.add_batch_norm, FLAGS.add_dropout)
 	elif FLAGS.vec2doc:
-		print("Sorry, not implemented yet!")
+		# print("Sorry, not implemented yet!")
+		model = models.sent2vec_model(embeddingSize, FLAGS.numComments, FLAGS.add_batch_norm, FLAGS.add_dropout)
 	else:
 		model = models.no_sent2vec_model(embeddingSize, FLAGS.numComments, FLAGS.add_batch_norm, FLAGS.add_dropout)
 	# Visualize model
