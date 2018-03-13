@@ -58,7 +58,13 @@ if __name__ == "__main__":
 	collection = database.iteration3
 	d2v = doc2vec.Doc2Vec.load('doc2vec_100.model')
 	# Load data generator
-	dataGen = simple_reader.mongoDBgenerator(collection, d2v, FLAGS.numComments, 1, FLAGS.batchSize)
+	dataGen =  simple_reader.mongoDBgenerator(collection, d2v, FLAGS.numComments,1, FLAGS.batchSize, 0.2,
+                        use_audio=(FLAGS.no_audio==False),
+                        use_video=(FLAGS.no_video==False),
+                        use_desc=(FLAGS.no_description==False),
+                        use_metadata=(FLAGS.no_metadata==False),
+                        use_comments = (FLAGS.numComments > 0),
+                        use_channel = (FLAGS.no_channel==False))
 	# Split into train and validation generators
 	dataGen1, dataGen2 = tee(dataGen)
 	trainGen, valGen = simple_reader.getTrainValGens(dataGen1, True), simple_reader.getTrainValGens(dataGen2, False)	

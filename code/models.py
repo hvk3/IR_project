@@ -354,7 +354,7 @@ def no_comments_model(EMBEDDING_SIZE, add_batch_norm=False, add_dropout=False):
 	if (add_batch_norm):
 		dense1_channelName = BatchNormalization()(dense1_channelName)
 	input_alltextual = Concatenate()([dense1_description, dense1_channelName])
-	dense2_alltextual = Dense(NUM_COMMENTS/4 * EMBEDDING_SIZE/4)(input_alltextual)
+	dense2_alltextual = Dense(EMBEDDING_SIZE/4)(input_alltextual)
 	if (add_batch_norm):
 		dense2_alltextual = BatchNormalization()(dense2_alltextual)
 

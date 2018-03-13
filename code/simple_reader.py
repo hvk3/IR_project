@@ -70,8 +70,8 @@ def filled_metadata(metadata):
 	return [commentCount, viewCount, favoriteCount, dislikeCount, likeCount]
 
 	
-def mongoDBgenerator(collection, d2vmodel, numComments, which, batch_size, validation_ratio=0.2, use_audio=True, use_video=True
-		, use_desc=True, use_metadata=True, use_comments=True, use_channel=True):
+def mongoDBgenerator(collection, d2vmodel, numComments, which, batch_size, validation_ratio, use_audio, use_video
+		, use_desc, use_metadata, use_comments, use_channel):
 	print("Found", collection.find({"which":which}).count(), "records")
 	while True:
 		i = 0
