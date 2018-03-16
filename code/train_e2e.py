@@ -80,6 +80,7 @@ if __name__ == "__main__":
 	# Train model
 	early_stop = EarlyStopping(monitor='val_loss', min_delta=0.1, patience=5, verbose=1)
 	reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=10, min_lr=0.01, verbose=1)
+	import pdb;pdb.set_trace()
 	model.fit_generator(trainGen, validation_data=valGen, validation_steps=200, steps_per_epoch=1000, epochs=FLAGS.numEpochs, callbacks=[early_stop, reduce_lr])
 	# Ealuate model on test data
 	finalLoss = 0.0
@@ -89,3 +90,4 @@ if __name__ == "__main__":
 		else:
 			break
 	print("Loss on test data:", finalLoss)
+

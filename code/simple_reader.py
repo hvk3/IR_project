@@ -1,11 +1,31 @@
 import json
 import numpy as np
-from itertools import tee
 import os
 import base64
 import tensorflow as tf
+from keras.preprocessing.text import text_to_word_sequence, one_hot, Tokenizer
 from google.protobuf.json_format import MessageToJson
 from gensim.models import doc2vec
+
+
+# For preparing text for LSTM model, use this
+# https://machinelearningmastery.com/prepare-text-data-deep-learning-keras/
+
+def get_titles(collection):
+	titles = []
+	vocab = {}
+	count = 0
+	for record in collection.find({}):
+		title = record['metadata']['metadata']['title']
+		for word in title.split(' '):
+			word = word.lower().strip()
+			if (word not in vocab):
+				vocab[word] = count
+				count += 1
+		titles.append(map(lambda x: vocab[x.lower().strip()], title.split(' ')))
+	np.save('titles.npy', titles)
+	np.save('vocab.npy', vocab)
+	return titles
 
 
 def extract_relevant_info(json_parsed_record, which_generator):
@@ -58,7 +78,7 @@ def rankAndSelectComments(comments, select):
 	selectedComments = []
 	for i in range(len(sortedByLikes)):
 		selectedComments.append(comments[sortedByLikes[i]]['comment'])
-	return selectedComments[:select]	
+	return selectedComments[:select]
 
 
 def filled_metadata(metadata):
@@ -69,7 +89,7 @@ def filled_metadata(metadata):
 	likeCount = metadata.get('likeCount', 0)
 	return [commentCount, viewCount, favoriteCount, dislikeCount, likeCount]
 
-	
+
 def mongoDBgenerator(collection, d2vmodel, numComments, which, batch_size, validation_ratio, use_audio, use_video
 		, use_desc, use_metadata, use_comments, use_channel):
 	print("Found", collection.find({"which":which}).count(), "records")
@@ -155,3 +175,4 @@ if __name__ == "__main__":
 	gen = mongoDBgenerator(ds, d2v, 2, 1, 16) 
 	x, y = gen.next()
 	print x.shape, y.shape
+

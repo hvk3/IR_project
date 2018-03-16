@@ -1,9 +1,9 @@
-from keras.layers import Input, Dense, Concatenate, Dropout, BatchNormalization, LSTM
+from keras.layers import Input, Dense, Concatenate, Dropout, BatchNormalization, LSTM, RepeatVector, TimeDistributed
 from keras.optimizers import Adadelta
 from keras.models import Model
 
 
-def sent2vec_model(EMBEDDING_SIZE, NUM_COMMENTS, add_batch_norm=False, add_dropout=False):
+def sent2vec_model(EMBEDDING_SIZE, NUM_COMMENTS, LSTM_EMB, vocab_size, add_batch_norm=False, add_dropout=False):
 	# Metadata based inputs
 	input_metadata = Input(shape=(6,))
 	dense1_metadata = Dense(64, activation='relu')(input_metadata)
@@ -55,11 +55,15 @@ def sent2vec_model(EMBEDDING_SIZE, NUM_COMMENTS, add_batch_norm=False, add_dropo
 	dense6_allinputs = Dense(2048, activation='relu')(dense5_allinputs)
 	if (add_dropout):
 		dense6_allinputs = Dropout(0.5)(dense6_allinputs)
-	model_output = Dense(EMBEDDING_SIZE)(dense6_allinputs)
+	feature_embedding = Dense(LSTM_EMB)(dense6_allinputs)
 
 	# LSTM for generating title; ref : https://github.com/keras-team/keras/blob/master/examples/lstm_seq2seq.py
-	decoder_lstm = LSTM(EMBEDDING_SIZE, return_sequences=True, return_state=True)(model_output)
-	decoder_outputs = Dense(26, activation='softmax')(decoder_lstm)
+	import pdb;pdb.set_trace()
+
+	repeated = RepeatVector(seqLength)(feature_embeding) 	
+	decoder_lstm_1 = LSTM(500, return_sequences=True)(repeated)
+	decoder_lstm_2 = LSTM(500, return_sequences=True)(decoder_lstm_1)
+	model_output = TimeDistributed(Dense(vocab_size, activation='softmax'))(decoder_lstm_2)
 
 	# Define model inputs (ordered) for model
 	model_inputs = [input_metadata, input_audio, input_video, input_description]
@@ -68,9 +72,8 @@ def sent2vec_model(EMBEDDING_SIZE, NUM_COMMENTS, add_batch_norm=False, add_dropo
 
 	# Define loss, compile model
 	model = Model(inputs=model_inputs, outputs=decoder_outputs)
-	# opt = Adadelta(lr=1)
-	# model.compile(loss='mean_squared_error', optimizer=opt)
-	model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
+	opt = Adadelta(lr=1)
+	model.compile(loss='categorical_crossentropy', optimizer=opt, metrics=['accuracy'])
 
 	return model
 
@@ -517,3 +520,4 @@ def no_channelname_model(EMBEDDING_SIZE, NUM_COMMENTS, add_batch_norm=False, add
 if __name__ == "__main__":
 	model = no_sent2vec_model(100, 2)
 	print model.inputs
+
