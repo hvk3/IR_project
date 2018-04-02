@@ -1,524 +1,137 @@
-from keras.layers import Input, Dense, Concatenate, Dropout, BatchNormalization, LSTM, RepeatVector, TimeDistributed
-from keras.optimizers import Adadelta
+from keras.layers import Input, Dense, Concatenate, Dropout,\
+    BatchNormalization, LSTM, RepeatVector, TimeDistributed
+from keras.optimizers import Adadelta, RMSprop
 from keras.models import Model
 
 
-def sent2vec_model(EMBEDDING_SIZE, NUM_COMMENTS, vocab_size, seqLength, add_batch_norm=False, add_dropout=False):
+def model(EMBEDDING_SIZE,
+          NUM_COMMENTS,
+          vocab_size=0,
+          seqLength=0,
+          batch_norm=False,
+          dropout=False,
+          use_audio=True,
+          use_video=True,
+          use_metadata=True,
+          use_channel=True,
+          use_description=True):
     # Metadata based inputs
     input_metadata = Input(shape=(6,))
     dense1_metadata = Dense(64, activation='relu')(input_metadata)
     dense2_metadata = Dense(32, activation='relu')(dense1_metadata)
-    if (add_batch_norm):
+    if (batch_norm):
         dense2_metadata = BatchNormalization()(dense2_metadata)
+    # Make output empty (all 0s)
+    if (not use_metadata):
+        dense2_metadata = Dropout(1)(dense2_metadata)
 
     # Raw audio/video based features
     input_audio = Input(shape=(128,))
     dense1_audio = Dense(512, activation='relu')(input_audio)
-    if (add_batch_norm):
+    if (batch_norm):
         dense1_audio = BatchNormalization()(dense1_audio)
+    if (not use_audio):
+        dense1_audio = Dropout(1)(dense1_audio)
     input_video = Input(shape=(1024,))
     dense1_video = Dense(2048, activation='relu')(input_video)
-    if (add_batch_norm):
+    if (batch_norm):
         dense1_video = BatchNormalization()(dense1_video)
+    if (not use_video):
+        dense1_video = Dropout(1)(dense1_video)
 
-    # Combine A/V layers
     dense2_audiovideo = Concatenate()([dense1_audio, dense1_video])
     dense3_audiovideo = Dense(1024, activation='relu')(dense2_audiovideo)
-    if (add_batch_norm):
+    if (batch_norm):
         dense3_audiovideo = BatchNormalization()(dense3_audiovideo)
 
     # Text-based features
     input_description = Input(shape=(EMBEDDING_SIZE,))
-    input_comments = [Input(shape=(EMBEDDING_SIZE,)) for _ in range(NUM_COMMENTS)]
+    input_comments = [
+        Input(shape=(EMBEDDING_SIZE,)) for _ in xrange(NUM_COMMENTS)
+    ]
     concat_input_comments = Concatenate()(input_comments)
     input_channelName = Input(shape=(EMBEDDING_SIZE,))
 
-    dense1_description = Dense(EMBEDDING_SIZE / 2, activation='relu')(input_description)
-    if (add_batch_norm):
+    dense1_description = Dense(
+        EMBEDDING_SIZE / 2,
+        activation='relu'
+    )(input_description)
+    if (batch_norm):
         dense1_description = BatchNormalization()(dense1_description)
-    dense1_comments = Dense(NUM_COMMENTS / 2 * EMBEDDING_SIZE / 2, activation='relu')(concat_input_comments)
-    if (add_batch_norm):
+    if (not use_description):
+        dense1_description = Dropout(1)(dense1_description)
+    dense1_comments = Dense(
+        NUM_COMMENTS / 2 * EMBEDDING_SIZE / 2,
+        activation='relu'
+    )(concat_input_comments)
+    if (batch_norm):
         dense1_comments = BatchNormalization()(dense1_comments)
-    dense1_channelName = Dense(EMBEDDING_SIZE / 2, activation='relu')(input_channelName)
-    if (add_batch_norm):
+    if (NUM_COMMENTS == 0):
+        dense1_comments = Dropout(1)(dense1_comments)
+    dense1_channelName = Dense(
+        EMBEDDING_SIZE / 2,
+        activation='relu'
+    )(input_channelName)
+    if (batch_norm):
         dense1_channelName = BatchNormalization()(dense1_channelName)
-    input_alltextual = Concatenate()([dense1_description, dense1_comments, dense1_channelName])
-    dense2_alltextual = Dense(NUM_COMMENTS / 4 * EMBEDDING_SIZE / 4)(input_alltextual)
-    if (add_batch_norm):
+    if (not use_channel):
+        dense1_channelName = Dropout(1)(dense1_channelName)
+    input_alltextual = Concatenate()([
+        dense1_description,
+        dense1_comments,
+        dense1_channelName
+    ])
+    dense2_alltextual = Dense(
+        (NUM_COMMENTS * EMBEDDING_SIZE) / 16
+    )(input_alltextual)
+    if (batch_norm):
         dense2_alltextual = BatchNormalization()(dense2_alltextual)
 
-    # Dense layers on all concatenated inputs to get output
-    dense4_allinputs = Concatenate()([dense2_metadata, dense3_audiovideo, dense2_alltextual])
+    dense4_allinputs = Concatenate()([
+        dense2_metadata,
+        dense3_audiovideo,
+        dense2_alltextual
+    ])
     dense5_allinputs = Dense(4096, activation='relu')(dense4_allinputs)
-    if (add_dropout):
+    if (dropout):
         dense5_allinputs = Dropout(0.5)(dense5_allinputs)
     dense6_allinputs = Dense(2048, activation='relu')(dense5_allinputs)
-    if (add_dropout):
-        dense6_allinputs = Dropout(0.5)(dense6_allinputs)
-    feature_embedding = Dense(EMBEDDING_SIZE)(dense6_allinputs)
-
-    # We now have an embedding generated using all other features available from the dataset
-    # We train a LSTM on top of this embedding, which learns how the video features are relevant to the embedding produced
-
-    # LSTM for generating title; ref : https://github.com/keras-team/keras/blob/master/examples/lstm_seq2seq.py
-    repeated = RepeatVector(seqLength)(feature_embedding)
-    decoder_lstm_1 = LSTM(500, return_sequences=True)(repeated)
-    # decoder_lstm_2 = LSTM(500, return_sequences=True)(decoder_lstm_1)
-    model_output = TimeDistributed(Dense(vocab_size, activation='softmax'))(decoder_lstm_1)
-
-    # Define model inputs (ordered) for model
-    model_inputs = [input_metadata, input_audio, input_video, input_description]
-    model_inputs += input_comments
-    model_inputs += [input_channelName]
-
-    # Define loss, compile model
-    model = Model(inputs=model_inputs, outputs=model_output)
-    model.compile(loss='categorical_crossentropy', optimizer='rmsprop', metrics=['accuracy'])
-
-    return model
-
-
-def no_sent2vec_model(EMBEDDING_SIZE, NUM_COMMENTS, add_batch_norm=False, add_dropout=False):
-    # Metadata based inputs
-    input_metadata = Input(shape=(6,))
-    dense1_metadata = Dense(64, activation='relu')(input_metadata)
-    dense2_metadata = Dense(32, activation='relu')(dense1_metadata)
-    if (add_batch_norm):
-        dense2_metadata = BatchNormalization()(dense2_metadata)
-
-    # Raw audio/video based features
-    input_audio = Input(shape=(128,))
-    dense1_audio = Dense(512, activation='relu')(input_audio)
-    if (add_batch_norm):
-        dense1_audio = BatchNormalization()(dense1_audio)
-    input_video = Input(shape=(1024,))
-    dense1_video = Dense(2048, activation='relu')(input_video)
-    if (add_batch_norm):
-        dense1_video = BatchNormalization()(dense1_video)
-
-    # Combine A/V layers
-    dense2_audiovideo = Concatenate()([dense1_audio, dense1_video])
-    dense3_audiovideo = Dense(1024, activation='relu')(dense2_audiovideo)
-    if (add_batch_norm):
-        dense3_audiovideo = BatchNormalization()(dense3_audiovideo)
-
-    # Text-based features
-    input_description = Input(shape=(EMBEDDING_SIZE,))
-    input_comments = [Input(shape=(EMBEDDING_SIZE,)) for _ in range(NUM_COMMENTS)]
-    concat_input_comments = Concatenate()(input_comments)
-    input_channelName = Input(shape=(EMBEDDING_SIZE,))
-
-    dense1_description = Dense(EMBEDDING_SIZE / 2, activation='relu')(input_description)
-    if (add_batch_norm):
-        dense1_description = BatchNormalization()(dense1_description)
-    dense1_comments = Dense(NUM_COMMENTS / 2 * EMBEDDING_SIZE / 2, activation='relu')(concat_input_comments)
-    if (add_batch_norm):
-        dense1_comments = BatchNormalization()(dense1_comments)
-    dense1_channelName = Dense(EMBEDDING_SIZE / 2, activation='relu')(input_channelName)
-    if (add_batch_norm):
-        dense1_channelName = BatchNormalization()(dense1_channelName)
-    input_alltextual = Concatenate()([dense1_description, dense1_comments, dense1_channelName])
-    dense2_alltextual = Dense(NUM_COMMENTS / 4 * EMBEDDING_SIZE / 4)(input_alltextual)
-    if (add_batch_norm):
-        dense2_alltextual = BatchNormalization()(dense2_alltextual)
-
-    # Dense layers on all concatenated inputs to get output
-    dense4_allinputs = Concatenate()([dense2_metadata, dense3_audiovideo, dense2_alltextual])
-    dense5_allinputs = Dense(4096, activation='relu')(dense4_allinputs)
-    if (add_dropout):
-        dense5_allinputs = Dropout(0.5)(dense5_allinputs)
-    dense6_allinputs = Dense(2048, activation='relu')(dense5_allinputs)
-    if (add_dropout):
+    if (dropout):
         dense6_allinputs = Dropout(0.5)(dense6_allinputs)
     model_output = Dense(EMBEDDING_SIZE)(dense6_allinputs)
+    if (seqLength > 0):
+        repeated = RepeatVector(seqLength)(model_output)
+        decoder_lstm_1 = LSTM(
+            200,
+            dropout=0.2,
+            recurrent_dropout=0.2,
+            return_sequences=True
+        )(repeated)
+        # decoder_lstm_2 = LSTM(
+        #     500,
+        #     recurrent_dropout=0.2,
+        #     return_sequences=True
+        # )(decoder_lstm_1)
+        model_output = TimeDistributed(
+            Dense(vocab_size, activation='softmax')
+        )(decoder_lstm_1)
+        # )(decoder_lstm_2)
 
-    # Define model inputs (ordered) for model
-    model_inputs = [input_metadata, input_audio, input_video, input_description]
-    model_inputs += input_comments
-    model_inputs += [input_channelName]
-
-    # Define loss, compile model
+    model_inputs = [
+        input_metadata,
+        input_audio,
+        input_video,
+        input_description
+    ] + input_comments + [input_channelName]
     model = Model(inputs=model_inputs, outputs=model_output)
-    opt = Adadelta(lr=1)
-    model.compile(loss='mean_squared_error', optimizer=opt)
 
+    if (seqLength > 0):
+        model.compile(
+            loss='categorical_crossentropy',
+            optimizer=RMSprop(lr=5e-4),
+            metrics=['accuracy']
+        )
+    else:
+        model.compile(loss='mean_squared_error', optimizer='adadelta')
     return model
-
-
-def no_metadata_model(EMBEDDING_SIZE, NUM_COMMENTS, add_batch_norm=False, add_dropout=False):
-    # Raw audio/video based features
-    input_audio = Input(shape=(128,))
-    dense1_audio = Dense(512, activation='relu')(input_audio)
-    if (add_batch_norm):
-        dense1_audio = BatchNormalization()(dense1_audio)
-    input_video = Input(shape=(1024,))
-    dense1_video = Dense(2048, activation='relu')(input_video)
-    if (add_batch_norm):
-        dense1_video = BatchNormalization()(dense1_video)
-
-    # Combine A/V layers
-    dense2_audiovideo = Concatenate()([dense1_audio, dense1_video])
-    dense3_audiovideo = Dense(1024, activation='relu')(dense2_audiovideo)
-    if (add_batch_norm):
-        dense3_audiovideo = BatchNormalization()(dense3_audiovideo)
-
-    # Text-based features
-    input_description = Input(shape=(EMBEDDING_SIZE,))
-    input_comments = [Input(shape=(EMBEDDING_SIZE,)) for _ in range(NUM_COMMENTS)]
-    concat_input_comments = Concatenate()(input_comments)
-    input_channelName = Input(shape=(EMBEDDING_SIZE,))
-
-    dense1_description = Dense(EMBEDDING_SIZE / 2, activation='relu')(input_description)
-    if (add_batch_norm):
-        dense1_description = BatchNormalization()(dense1_description)
-    dense1_comments = Dense(NUM_COMMENTS / 2 * EMBEDDING_SIZE / 2, activation='relu')(concat_input_comments)
-    if (add_batch_norm):
-        dense1_comments = BatchNormalization()(dense1_comments)
-    dense1_channelName = Dense(EMBEDDING_SIZE / 2, activation='relu')(input_channelName)
-    if (add_batch_norm):
-        dense1_channelName = BatchNormalization()(dense1_channelName)
-    input_alltextual = Concatenate()([dense1_description, dense1_comments, dense1_channelName])
-    dense2_alltextual = Dense(NUM_COMMENTS / 4 * EMBEDDING_SIZE / 4)(input_alltextual)
-    if (add_batch_norm):
-        dense2_alltextual = BatchNormalization()(dense2_alltextual)
-
-    # Dense layers on all concatenated inputs to get output
-    dense4_allinputs = Concatenate()([dense3_audiovideo, dense2_alltextual])
-    dense5_allinputs = Dense(4096, activation='relu')(dense4_allinputs)
-    if (add_dropout):
-        dense5_allinputs = Dropout(0.5)(dense5_allinputs)
-    dense6_allinputs = Dense(2048, activation='relu')(dense5_allinputs)
-    if (add_dropout):
-        dense6_allinputs = Dropout(0.5)(dense6_allinputs)
-    model_output = Dense(EMBEDDING_SIZE)(dense6_allinputs)
-
-    # Define model inputs (ordered) for model
-    model_inputs = [input_audio, input_video, input_description]
-    model_inputs += input_comments
-    model_inputs += [input_channelName]
-
-    # Define loss, compile model
-    model = Model(inputs=model_inputs, outputs=model_output)
-    opt = Adadelta(lr=1)
-    model.compile(loss='mean_squared_error', optimizer=opt)
-
-    return model
-
-
-def no_audio_model(EMBEDDING_SIZE, NUM_COMMENTS, add_batch_norm=False, add_dropout=False):
-    # Metadata based inputs
-    input_metadata = Input(shape=(6,))
-    dense1_metadata = Dense(64, activation='relu')(input_metadata)
-    dense2_metadata = Dense(32, activation='relu')(dense1_metadata)
-    if (add_batch_norm):
-        dense2_metadata = BatchNormalization()(dense2_metadata)
-
-    # Raw video based features
-    input_video = Input(shape=(1024,))
-    dense1_video = Dense(2048, activation='relu')(input_video)
-    if (add_batch_norm):
-        dense1_video = BatchNormalization()(dense1_video)
-
-    # Combine A/V layers
-    dense2_audiovideo = dense1_video
-    dense3_audiovideo = Dense(1024, activation='relu')(dense2_audiovideo)
-    if (add_batch_norm):
-        dense3_audiovideo = BatchNormalization()(dense3_audiovideo)
-
-    # Text-based features
-    input_description = Input(shape=(EMBEDDING_SIZE,))
-    input_comments = [Input(shape=(EMBEDDING_SIZE,)) for _ in range(NUM_COMMENTS)]
-    concat_input_comments = Concatenate()(input_comments)
-    input_channelName = Input(shape=(EMBEDDING_SIZE,))
-
-    dense1_description = Dense(EMBEDDING_SIZE / 2, activation='relu')(input_description)
-    if (add_batch_norm):
-        dense1_description = BatchNormalization()(dense1_description)
-    dense1_comments = Dense(NUM_COMMENTS / 2 * EMBEDDING_SIZE / 2, activation='relu')(concat_input_comments)
-    if (add_batch_norm):
-        dense1_comments = BatchNormalization()(dense1_comments)
-    dense1_channelName = Dense(EMBEDDING_SIZE / 2, activation='relu')(input_channelName)
-    if (add_batch_norm):
-        dense1_channelName = BatchNormalization()(dense1_channelName)
-    input_alltextual = Concatenate()([dense1_description, dense1_comments, dense1_channelName])
-    dense2_alltextual = Dense(NUM_COMMENTS / 4 * EMBEDDING_SIZE / 4)(input_alltextual)
-    if (add_batch_norm):
-        dense2_alltextual = BatchNormalization()(dense2_alltextual)
-
-    # Dense layers on all concatenated inputs to get output
-    dense4_allinputs = Concatenate()([dense2_metadata, dense3_audiovideo, dense2_alltextual])
-    dense5_allinputs = Dense(4096, activation='relu')(dense4_allinputs)
-    if (add_dropout):
-        dense5_allinputs = Dropout(0.5)(dense5_allinputs)
-    dense6_allinputs = Dense(2048, activation='relu')(dense5_allinputs)
-    if (add_dropout):
-        dense6_allinputs = Dropout(0.5)(dense6_allinputs)
-    model_output = Dense(EMBEDDING_SIZE)(dense6_allinputs)
-
-    # Define model inputs (ordered) for model
-    model_inputs = [input_metadata, input_video, input_description]
-    model_inputs += input_comments
-    model_inputs += [input_channelName]
-
-    # Define loss, compile model
-    model = Model(inputs=model_inputs, outputs=model_output)
-    opt = Adadelta(lr=1)
-    model.compile(loss='mean_squared_error', optimizer=opt)
-
-    return model
-
-
-def no_video_model(EMBEDDING_SIZE, NUM_COMMENTS, add_batch_norm=False, add_dropout=False):
-    # Metadata based inputs
-    input_metadata = Input(shape=(6,))
-    dense1_metadata = Dense(64, activation='relu')(input_metadata)
-    dense2_metadata = Dense(32, activation='relu')(dense1_metadata)
-    if (add_batch_norm):
-        dense2_metadata = BatchNormalization()(dense2_metadata)
-
-    # Raw audio based features
-    input_audio = Input(shape=(128,))
-    dense1_audio = Dense(512, activation='relu')(input_audio)
-    if (add_batch_norm):
-        dense1_audio = BatchNormalization()(dense1_audio)
-
-    # Combine A/V layers
-    dense2_audiovideo = dense1_audio
-    dense3_audiovideo = Dense(1024, activation='relu')(dense2_audiovideo)
-    if (add_batch_norm):
-        dense3_audiovideo = BatchNormalization()(dense3_audiovideo)
-
-    # Text-based features
-    input_description = Input(shape=(EMBEDDING_SIZE,))
-    input_comments = [Input(shape=(EMBEDDING_SIZE,)) for _ in range(NUM_COMMENTS)]
-    concat_input_comments = Concatenate()(input_comments)
-    input_channelName = Input(shape=(EMBEDDING_SIZE,))
-
-    dense1_description = Dense(EMBEDDING_SIZE / 2, activation='relu')(input_description)
-    if (add_batch_norm):
-        dense1_description = BatchNormalization()(dense1_description)
-    dense1_comments = Dense(NUM_COMMENTS / 2 * EMBEDDING_SIZE / 2, activation='relu')(concat_input_comments)
-    if (add_batch_norm):
-        dense1_comments = BatchNormalization()(dense1_comments)
-    dense1_channelName = Dense(EMBEDDING_SIZE / 2, activation='relu')(input_channelName)
-    if (add_batch_norm):
-        dense1_channelName = BatchNormalization()(dense1_channelName)
-    input_alltextual = Concatenate()([dense1_description, dense1_comments, dense1_channelName])
-    dense2_alltextual = Dense(NUM_COMMENTS / 4 * EMBEDDING_SIZE / 4)(input_alltextual)
-    if (add_batch_norm):
-        dense2_alltextual = BatchNormalization()(dense2_alltextual)
-
-    # Dense layers on all concatenated inputs to get output
-    dense4_allinputs = Concatenate()([dense2_metadata, dense3_audiovideo, dense2_alltextual])
-    dense5_allinputs = Dense(4096, activation='relu')(dense4_allinputs)
-    if (add_dropout):
-        dense5_allinputs = Dropout(0.5)(dense5_allinputs)
-    dense6_allinputs = Dense(2048, activation='relu')(dense5_allinputs)
-    if (add_dropout):
-        dense6_allinputs = Dropout(0.5)(dense6_allinputs)
-    model_output = Dense(EMBEDDING_SIZE)(dense6_allinputs)
-
-    # Define model inputs (ordered) for model
-    model_inputs = [input_metadata, input_audio, input_description]
-    model_inputs += input_comments
-    model_inputs += [input_channelName]
-
-    # Define loss, compile model
-    model = Model(inputs=model_inputs, outputs=model_output)
-    opt = Adadelta(lr=1)
-    model.compile(loss='mean_squared_error', optimizer=opt)
-
-    return model
-
-
-def no_description_model(EMBEDDING_SIZE, NUM_COMMENTS, add_batch_norm=False, add_dropout=False):
-    # Metadata based inputs
-    input_metadata = Input(shape=(6,))
-    dense1_metadata = Dense(64, activation='relu')(input_metadata)
-    dense2_metadata = Dense(32, activation='relu')(dense1_metadata)
-    if (add_batch_norm):
-        dense2_metadata = BatchNormalization()(dense2_metadata)
-
-    # Raw audio/video based features
-    input_audio = Input(shape=(128,))
-    dense1_audio = Dense(512, activation='relu')(input_audio)
-    if (add_batch_norm):
-        dense1_audio = BatchNormalization()(dense1_audio)
-    input_video = Input(shape=(1024,))
-    dense1_video = Dense(2048, activation='relu')(input_video)
-    if (add_batch_norm):
-        dense1_video = BatchNormalization()(dense1_video)
-
-    # Combine A/V layers
-    dense2_audiovideo = Concatenate()([dense1_audio, dense1_video])
-    dense3_audiovideo = Dense(1024, activation='relu')(dense2_audiovideo)
-    if (add_batch_norm):
-        dense3_audiovideo = BatchNormalization()(dense3_audiovideo)
-
-    # Text-based features
-    input_comments = [Input(shape=(EMBEDDING_SIZE,)) for _ in range(NUM_COMMENTS)]
-    concat_input_comments = Concatenate()(input_comments)
-    input_channelName = Input(shape=(EMBEDDING_SIZE,))
-
-    dense1_comments = Dense(NUM_COMMENTS / 2 * EMBEDDING_SIZE / 2, activation='relu')(concat_input_comments)
-    if (add_batch_norm):
-        dense1_comments = BatchNormalization()(dense1_comments)
-    dense1_channelName = Dense(EMBEDDING_SIZE / 2, activation='relu')(input_channelName)
-    if (add_batch_norm):
-        dense1_channelName = BatchNormalization()(dense1_channelName)
-    input_alltextual = Concatenate()([dense1_comments, dense1_channelName])
-    dense2_alltextual = Dense(NUM_COMMENTS / 4 * EMBEDDING_SIZE / 4)(input_alltextual)
-    if (add_batch_norm):
-        dense2_alltextual = BatchNormalization()(dense2_alltextual)
-
-    # Dense layers on all concatenated inputs to get output
-    dense4_allinputs = Concatenate()([dense2_metadata, dense3_audiovideo, dense2_alltextual])
-    dense5_allinputs = Dense(4096, activation='relu')(dense4_allinputs)
-    if (add_dropout):
-        dense5_allinputs = Dropout(0.5)(dense5_allinputs)
-    dense6_allinputs = Dense(2048, activation='relu')(dense5_allinputs)
-    if (add_dropout):
-        dense6_allinputs = Dropout(0.5)(dense6_allinputs)
-    model_output = Dense(EMBEDDING_SIZE)(dense6_allinputs)
-
-    # Define model inputs (ordered) for model
-    model_inputs = [input_metadata, input_audio, input_video]
-    model_inputs += input_comments
-    model_inputs += [input_channelName]
-
-    # Define loss, compile model
-    model = Model(inputs=model_inputs, outputs=model_output)
-    opt = Adadelta(lr=1)
-    model.compile(loss='mean_squared_error', optimizer=opt)
-
-    return model
-
-
-def no_comments_model(EMBEDDING_SIZE, add_batch_norm=False, add_dropout=False):
-    # Metadata based inputs
-    input_metadata = Input(shape=(6,))
-    dense1_metadata = Dense(64, activation='relu')(input_metadata)
-    dense2_metadata = Dense(32, activation='relu')(dense1_metadata)
-    if (add_batch_norm):
-        dense2_metadata = BatchNormalization()(dense2_metadata)
-
-    # Raw audio/video based features
-    input_audio = Input(shape=(128,))
-    dense1_audio = Dense(512, activation='relu')(input_audio)
-    if (add_batch_norm):
-        dense1_audio = BatchNormalization()(dense1_audio)
-    input_video = Input(shape=(1024,))
-    dense1_video = Dense(2048, activation='relu')(input_video)
-    if (add_batch_norm):
-        dense1_video = BatchNormalization()(dense1_video)
-
-    # Combine A/V layers
-    dense2_audiovideo = Concatenate()([dense1_audio, dense1_video])
-    dense3_audiovideo = Dense(1024, activation='relu')(dense2_audiovideo)
-    if (add_batch_norm):
-        dense3_audiovideo = BatchNormalization()(dense3_audiovideo)
-
-    # Text-based features
-    input_description = Input(shape=(EMBEDDING_SIZE,))
-    input_channelName = Input(shape=(EMBEDDING_SIZE,))
-
-    dense1_description = Dense(EMBEDDING_SIZE / 2, activation='relu')(input_description)
-    if (add_batch_norm):
-        dense1_description = BatchNormalization()(dense1_description)
-    dense1_channelName = Dense(EMBEDDING_SIZE / 2, activation='relu')(input_channelName)
-    if (add_batch_norm):
-        dense1_channelName = BatchNormalization()(dense1_channelName)
-    input_alltextual = Concatenate()([dense1_description, dense1_channelName])
-    dense2_alltextual = Dense(NUM_COMMENTS / 4 * EMBEDDING_SIZE / 4)(input_alltextual)
-    if (add_batch_norm):
-        dense2_alltextual = BatchNormalization()(dense2_alltextual)
-
-    # Dense layers on all concatenated inputs to get output
-    dense4_allinputs = Concatenate()([dense2_metadata, dense3_audiovideo, dense2_alltextual])
-    dense5_allinputs = Dense(4096, activation='relu')(dense4_allinputs)
-    if (add_dropout):
-        dense5_allinputs = Dropout(0.5)(dense5_allinputs)
-    dense6_allinputs = Dense(2048, activation='relu')(dense5_allinputs)
-    if (add_dropout):
-        dense6_allinputs = Dropout(0.5)(dense6_allinputs)
-    model_output = Dense(EMBEDDING_SIZE)(dense6_allinputs)
-
-    # Define model inputs (ordered) for model
-    model_inputs = [input_metadata, input_audio, input_video, input_description]
-    model_inputs += [input_channelName]
-
-    # Define loss, compile model
-    model = Model(inputs=model_inputs, outputs=model_output)
-    opt = Adadelta(lr=1)
-    model.compile(loss='mean_squared_error', optimizer=opt)
-
-    return model
-
-
-def no_channelname_model(EMBEDDING_SIZE, NUM_COMMENTS, add_batch_norm=False, add_dropout=False):
-    # Metadata based inputs
-    input_metadata = Input(shape=(6,))
-    dense1_metadata = Dense(64, activation='relu')(input_metadata)
-    dense2_metadata = Dense(32, activation='relu')(dense1_metadata)
-    if (add_batch_norm):
-        dense2_metadata = BatchNormalization()(dense2_metadata)
-
-    # Raw audio/video based features
-    input_audio = Input(shape=(128,))
-    dense1_audio = Dense(512, activation='relu')(input_audio)
-    if (add_batch_norm):
-        dense1_audio = BatchNormalization()(dense1_audio)
-    input_video = Input(shape=(1024,))
-    dense1_video = Dense(2048, activation='relu')(input_video)
-    if (add_batch_norm):
-        dense1_video = BatchNormalization()(dense1_video)
-
-    # Combine A/V layers
-    dense2_audiovideo = Concatenate()([dense1_audio, dense1_video])
-    dense3_audiovideo = Dense(1024, activation='relu')(dense2_audiovideo)
-    if (add_batch_norm):
-        dense3_audiovideo = BatchNormalization()(dense3_audiovideo)
-
-    # Text-based features
-    input_description = Input(shape=(EMBEDDING_SIZE,))
-    input_comments = [Input(shape=(EMBEDDING_SIZE,)) for _ in range(NUM_COMMENTS)]
-    concat_input_comments = Concatenate()(input_comments)
-
-    dense1_description = Dense(EMBEDDING_SIZE / 2, activation='relu')(input_description)
-    if (add_batch_norm):
-        dense1_description = BatchNormalization()(dense1_description)
-    dense1_comments = Dense(NUM_COMMENTS / 2 * EMBEDDING_SIZE / 2, activation='relu')(concat_input_comments)
-    if (add_batch_norm):
-        dense1_comments = BatchNormalization()(dense1_comments)
-    input_alltextual = Concatenate()([dense1_description, dense1_comments])
-    dense2_alltextual = Dense(NUM_COMMENTS / 4 * EMBEDDING_SIZE / 4)(input_alltextual)
-    if (add_batch_norm):
-        dense2_alltextual = BatchNormalization()(dense2_alltextual)
-
-    # Dense layers on all concatenated inputs to get output
-    dense4_allinputs = Concatenate()([dense2_metadata, dense3_audiovideo, dense2_alltextual])
-    dense5_allinputs = Dense(4096, activation='relu')(dense4_allinputs)
-    if (add_dropout):
-        dense5_allinputs = Dropout(0.5)(dense5_allinputs)
-    dense6_allinputs = Dense(2048, activation='relu')(dense5_allinputs)
-    if (add_dropout):
-        dense6_allinputs = Dropout(0.5)(dense6_allinputs)
-    model_output = Dense(EMBEDDING_SIZE)(dense6_allinputs)
-
-    # Define model inputs (ordered) for model
-    model_inputs = [input_metadata, input_audio, input_video, input_description]
-    model_inputs += input_comments
-
-    # Define loss, compile model
-    model = Model(inputs=model_inputs, outputs=model_output)
-    opt = Adadelta(lr=1)
-    model.compile(loss='mean_squared_error', optimizer=opt)
-
-    return model
-
-
-if __name__ == "__main__":
-    model = no_sent2vec_model(100, 2)
-    print model.inputs
-
 

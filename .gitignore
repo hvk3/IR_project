@@ -1,3 +1,4 @@
 *.pyc
 data/*
 dummydata/*
+clickbait-detector-master/*
