@@ -2,6 +2,7 @@ from keras.layers import Input, Dense, Concatenate, Dropout,\
     BatchNormalization, LSTM, RepeatVector, TimeDistributed
 from keras.optimizers import Adadelta, RMSprop
 from keras.models import Model
+import sys
 
 
 def model(EMBEDDING_SIZE,
@@ -134,4 +135,23 @@ def model(EMBEDDING_SIZE,
     else:
         model.compile(loss='mean_squared_error', optimizer='adadelta')
     return model
+
+
+def customTrain(model, dataGen, epochs, batch_size, valRatio=0.2):
+    steps_per_epoch = 320000 / batch_size
+    for _ in range(epochs):
+        train_loss, val_loss = 0, 0
+        train_acc, val_acc = 0, 0
+        for i in range(steps_per_epoch):
+            (x_train, y_train), (x_test, y_test) = dataGen.next()
+            train_metrics = model.train_on_batch(x_train, y_train)
+            train_loss += train_metrics[0]
+            train_acc += train_metrics[1]
+            val_metrics = model.test_on_batch(x_test, y_test)
+            val_loss += val_metrics[0]
+            val_acc += val_metrics[1]
+            sys.stdout.write("%d / %d : Tr loss: %f, Tr acc: %f, Vl loss: %f, Vl acc: %f  \r" % (i+1, steps_per_epoch, train_loss/(i+1), train_acc/(i+1), val_loss/(i+1), val_acc/(i+1)))
+            sys.stdout.flush()
+        print("\n")
+
 

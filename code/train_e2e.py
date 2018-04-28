@@ -4,7 +4,6 @@ import simple_reader
 import pickle
 from pymongo import MongoClient
 from gensim.models import doc2vec
-from itertools import tee
 from keras.utils import plot_model
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau
 
@@ -27,6 +26,7 @@ flags.DEFINE_integer(
 )
 flags.DEFINE_integer('batchSize', 16, 'Batch size')
 flags.DEFINE_integer('numEpochs', 50, 'Number of epochs')
+flags.DEFINE_integer('maxLen', 5, 'Max length for padding')
 flags.DEFINE_boolean(
     'add_batch_norm',
     False,
@@ -52,7 +52,8 @@ if __name__ == "__main__":
     collection = database.iteration3
 
     d2v = doc2vec.Doc2Vec.load('doc2vec_{}.model'.format(embeddingSize))
-    max_len = vocab_size = 0
+    vocab_size = 0
+    max_len = FLAGS.maxLen
     # Load data generator
     dataGen = simple_reader.mongoDBgenerator(
         collection,
@@ -61,16 +62,18 @@ if __name__ == "__main__":
         1,
         FLAGS.batchSize,
         0.2,
-        FLAGS.vec2doc
+        FLAGS.vec2doc,
+        max_len
     )
-    # Ensuring function calls within generator work
+    # Ensure tokenizer works
     _ = dataGen.next()
     if FLAGS.vec2doc:
         tokenizer = pickle.load(open('tokenizer.pickle', 'r'))
         # max_len = np.load('max_seq_length.npy').item()
-        max_len = 15
         vocab_size = tokenizer.num_words
         del tokenizer
+    # Ensuring function calls within generator work
+    _ = dataGen.next()
     model = models.model(
         embeddingSize,
         FLAGS.numComments,
@@ -86,10 +89,6 @@ if __name__ == "__main__":
     )
     # Visualize model
     plot_model(model, to_file='model_arch.png')
-    # Split into train and validation generators
-    dataGen1, dataGen2 = tee(dataGen)
-    trainGen = simple_reader.getTrainValGens(dataGen1, True)
-    valGen = simple_reader.getTrainValGens(dataGen2, False)
     # Load test generator
     testGen = simple_reader.mongoDBgenerator(
         collection,
@@ -98,7 +97,9 @@ if __name__ == "__main__":
         3,
         FLAGS.batchSize,
         0.2,
-        FLAGS.vec2doc)
+        FLAGS.vec2doc,
+        max_len
+    )
     # Train model
     early_stop = EarlyStopping(
         monitor='val_loss',
@@ -113,16 +114,7 @@ if __name__ == "__main__":
         min_lr=0.01,
         verbose=1
     )
-    # import pdb
-    # pdb.set_trace()
-    model.fit_generator(
-        trainGen,
-        validation_data=valGen,
-        validation_steps=200,
-        steps_per_epoch=1000,
-        epochs=FLAGS.numEpochs,
-        callbacks=[early_stop, reduce_lr]
-    )
+    models.customTrain(model, dataGen, FLAGS.numEpochs, batch_size, valRatio=0.2)
     # Evaluate model on test data
     metric_computed = 0.0
     num_batches = 0
@@ -143,4 +135,5 @@ if __name__ == "__main__":
     # if (FLAGS.vec2doc):
     #     metric_computed *= 100. / num_batches
     # print("Metric on test data:", metric_computed)
+
 

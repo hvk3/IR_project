@@ -29,7 +29,7 @@ def get_titles(collection):
 def pickle_tokenizer(collection):
     titles = get_titles(collection)
     if (not os.path.exists('tokenizer.pickle')):
-        tokenizer = Tokenizer(num_words=10000)
+        tokenizer = Tokenizer(num_words=50000)
         tokenizer.fit_on_texts(titles)
         with open('tokenizer.pickle', 'wb') as handle:
             pickle.dump(tokenizer, handle, protocol=pickle.HIGHEST_PROTOCOL)
@@ -116,9 +116,11 @@ def mongoDBgenerator(
     which,
     batch_size,
     validation_ratio,
-    use_titles
+    use_titles,
+    maxlen
 ):
     # print "Found {} records".format(collection.find({"which":which}).count())
+    #import pdb;pdb.set_trace()
     if (use_titles):
         tokenizer = pickle_tokenizer(collection)
         vocab_size = tokenizer.num_words
@@ -141,7 +143,7 @@ def mongoDBgenerator(
                 title = metadata['title']
                 Y_ = pad_sequences(
                     tokenizer.texts_to_sequences([title]),
-                    maxlen=15
+                    maxlen=maxlen
                 )
                 Y.append(np.array(map(
                     lambda x: map(
@@ -222,4 +224,5 @@ if __name__ == "__main__":
     gen = mongoDBgenerator(ds, d2v, 2, 1, 16)
     x, y = gen.next()
     print x.shape, y.shape
+
 
