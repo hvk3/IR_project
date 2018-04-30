@@ -6,6 +6,7 @@ from pymongo import MongoClient
 from gensim.models import doc2vec
 from keras.utils import plot_model
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau
+from keras.models import load_model
 
 import tensorflow as tf
 from tensorflow.python.platform import flags
@@ -19,13 +20,14 @@ keras.backend.set_session(sess)
 
 # Define flags
 FLAGS = flags.FLAGS
+flags.DEFINE_boolean('test_demo', False, 'Test model on some examples?')
 flags.DEFINE_integer(
     'numComments',
     3,
     'Number of comments to be considered while building and training model'
 )
 flags.DEFINE_integer('batchSize', 16, 'Batch size')
-flags.DEFINE_integer('numEpochs', 50, 'Number of epochs')
+flags.DEFINE_integer('numEpochs', 3, 'Number of epochs')
 flags.DEFINE_integer('maxLen', 5, 'Max length for padding')
 flags.DEFINE_boolean(
     'add_batch_norm',
@@ -45,15 +47,22 @@ flags.DEFINE_boolean(
 )
 
 
+def check_labels(y_train):
+    for i in xrange(len(y_train)):
+        print map(lambda x: np.argmax(x), y_train[i])
+
+
 if __name__ == "__main__":
     embeddingSize = 400
     client = MongoClient()
     database = client.youtube8m
-    collection = database.iteration3
+    collection = database.iteration6
 
     d2v = doc2vec.Doc2Vec.load('doc2vec_{}.model'.format(embeddingSize))
     vocab_size = 0
-    max_len = FLAGS.maxLen
+    max_len = 0
+    if (FLAGS.vec2doc):
+        max_len = FLAGS.maxLen
     # Load data generator
     dataGen = simple_reader.mongoDBgenerator(
         collection,
@@ -114,26 +123,44 @@ if __name__ == "__main__":
         min_lr=0.01,
         verbose=1
     )
-    models.customTrain(model, dataGen, FLAGS.numEpochs, batch_size, valRatio=0.2)
+    if FLAGS.test_demo:
+        model = load_model("IR_demo_project.h5")
+    else:
+        models.customTrain(
+            model,
+            dataGen,
+            FLAGS.numEpochs,
+            FLAGS.batchSize,
+            valRatio=0.2,
+            no_acc=True
+        )
+        model.save("IR_demo_project.h5")
     # Evaluate model on test data
+    from scipy import spatial
     metric_computed = 0.0
     num_batches = 0
-    for testBatch in testGen:
-        if testBatch:
+    for tb in testGen:
+        if tb:
             num_batches += 1
-            # batch_metric_computed = model.evaluate(
-            #     testBatch[0],
-            #     testBatch[1],
-            #     verbose=0
-            # )
+            testBatch, chak = tb
+            batch_metric_computed = model.evaluate(
+                 testBatch[0],
+                 testBatch[1],
+                 verbose=0
+            )
             prediction = model.predict(testBatch[0])
-            for po in prediction:
-                print np.max(po), np.argmax(po)
-            # metric_computed += batch_metric_computed[0] / len(testBatch[1])
+            #for po in prediction:
+            #    print np.max(po), np.argmax(po)
+            metric_computed += batch_metric_computed / len(testBatch[1])
+            print chak
+            testvec = d2v.infer_vector(chak[1])
+            print("Cosine Similarity Score For Original Title: %f", 50 * (2 - spatial.distance.cosine(testvec, prediction[-1])))
+            suggested_title = raw_input("Enter suggested title: ")
+            testvec = d2v.infer_vector(suggested_title)
+            print("Cosine Similarity Score : %f", 50 * (2 - spatial.distance.cosine(testvec, prediction[-1])))
         else:
             break
     # if (FLAGS.vec2doc):
     #     metric_computed *= 100. / num_batches
-    # print("Metric on test data:", metric_computed)
-
+    print("Metric on test data:", metric_computed)
 

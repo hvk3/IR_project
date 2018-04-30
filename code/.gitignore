@@ -5,3 +5,4 @@ client_secrets.json
 *.model
 *.png
 *.pickle
+*.h5

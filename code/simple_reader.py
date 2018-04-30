@@ -3,6 +3,7 @@ import numpy as np
 import os
 import base64
 import pickle
+import string
 import tensorflow as tf
 from keras.preprocessing.sequence import pad_sequences
 from keras.preprocessing.text import Tokenizer
@@ -15,15 +16,36 @@ from gensim.models import doc2vec
 
 
 def get_titles(collection):
+    # import pdb
     if (not os.path.exists('titles.npy')):
+        # pdb.set_trace()
         titles = []
         for record in collection.find({}):
-            title = record['metadata']['metadata']['title'].encode('utf-8')
+            title = record['metadata']['metadata']['title']
+            title = ''.join([i if ord(i) < 128 else '' for i in title])
+            title = title.lower().strip()
+            title = filter(lambda x: x not in string.punctuation, title)
+            if (len(title.split(' ')) > 10):
+                continue
             titles.append(title)
         np.save('titles.npy', titles)
     else:
         titles = np.load('titles.npy')
     return titles
+
+
+def prune(titles, tokenizer):
+    pruned_titles = []
+    for title in titles:
+        flag = False
+        for token in title.split(' '):
+            if (tokenizer.word_counts.get(token, 0) <= 1):
+                flag = True
+                break
+        if (not flag):
+            pruned_titles.append(title)
+    print len(titles), len(pruned_titles)
+    np.save('titles.npy', pruned_titles)
 
 
 def pickle_tokenizer(collection):
@@ -33,6 +55,7 @@ def pickle_tokenizer(collection):
         tokenizer.fit_on_texts(titles)
         with open('tokenizer.pickle', 'wb') as handle:
             pickle.dump(tokenizer, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        prune(titles, tokenizer)
     else:
         with open('tokenizer.pickle', 'rb') as handle:
             tokenizer = pickle.load(handle)
@@ -120,10 +143,10 @@ def mongoDBgenerator(
     maxlen
 ):
     # print "Found {} records".format(collection.find({"which":which}).count())
-    #import pdb;pdb.set_trace()
     if (use_titles):
         tokenizer = pickle_tokenizer(collection)
         vocab_size = tokenizer.num_words
+        pruned_titles = set(np.load('titles.npy').tolist())
     while True:
         X_metadata, X_audio, X_video, X_desc, X_channel =\
             [[] for _ in xrange(5)]
@@ -141,9 +164,16 @@ def mongoDBgenerator(
                 Y.append(d2vmodel.infer_vector(metadata['title'].split(' ')))
             else:
                 title = metadata['title']
+                title = ''.join([i if ord(i) < 128 else '' for i in title])
+                title = title.lower().strip()
+                title = filter(lambda x: x not in string.punctuation, title)
+                if (title not in pruned_titles):
+                    continue
                 Y_ = pad_sequences(
                     tokenizer.texts_to_sequences([title]),
-                    maxlen=maxlen
+                    maxlen=maxlen,
+                    padding='post',
+                    truncating='post'
                 )
                 Y.append(np.array(map(
                     lambda x: map(
@@ -197,7 +227,7 @@ def mongoDBgenerator(
                     X_val = [x[:splitPoint] for x in X]
                     yield (X_train, Y[splitPoint:]), (X_val, Y[:splitPoint])
                 else:
-                    yield X, Y
+                    yield (X, Y), (record['metadata']['_id'], metadata['title'])
                 X_metadata, X_audio, X_video, X_desc, X_channel =\
                     [[] for _ in xrange(5)]
                 Y, X_comments = [], [[] for _ in range(numComments)]
@@ -224,5 +254,6 @@ if __name__ == "__main__":
     gen = mongoDBgenerator(ds, d2v, 2, 1, 16)
     x, y = gen.next()
     print x.shape, y.shape
+
 
 
