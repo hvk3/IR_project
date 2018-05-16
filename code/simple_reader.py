@@ -95,7 +95,7 @@ def generator(location, which_generator, batch_size):
         protobuf_records
     )
     i = 0
-    #import pdb;pdb.set_trace()
+
     for j in range(len(protobuf_records) // batch_size):
         print(j, "out of", len(protobuf_records) // batch_size, "done")
         i %= batch_size
@@ -256,4 +256,3 @@ if __name__ == "__main__":
     gen = mongoDBgenerator(ds, d2v, 2, 1, 16)
     x, y = gen.next()
     print x.shape, y.shape
-

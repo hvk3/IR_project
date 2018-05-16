@@ -29,13 +29,11 @@ def populate_data(location, which_generator):
                     pseudoargs = {"videoid": videoid, "language": "en"}
                     # Query Google if it doesn't exist in cached DB
                     if not ds.find({'_id': videoid}).count():
-                        print videoid
                         youtube = get_video_info.get_authenticated_service(
                             pseudoargs
                         )
                         count += 1
-                        print count
-                        #pdb.set_trace()
+                        print(count)
                         metadata = get_video_info.get_video_metadata(
                             youtube,
                             pseudoargs['videoid']
@@ -48,7 +46,7 @@ def populate_data(location, which_generator):
                             }
                         )
                         i += 1
-                        print videoid
+                        print(videoid)
                         if (count > 1000000):
                             end_time = start_time
                             end_time.day += 1

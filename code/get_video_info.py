@@ -42,7 +42,6 @@ def get_authenticated_service(args):
         credentials = run_flow(flow, storage, args)
 
     import pdb
-    #pdb.set_trace()
     if credentials.access_token_expired:
         cred = GoogleCredentials(
             credentials.access_token,
@@ -111,7 +110,6 @@ def get_comment_threads(youtube, video_id):
     ).execute()
 
     comments = []
-
     for item in results["items"]:
         comment = item["snippet"]["topLevelComment"]
         like_count = comment['snippet']['likeCount']
@@ -159,4 +157,7 @@ if __name__ == "__main__":
     youtube = get_authenticated_service(args)
     metadata = get_video_metadata(youtube, pseudoargs['videoid'])
     print metadata
+<<<<<<< HEAD
 
+=======
+>>>>>>> 3940f13423ef9ec2f511d4b2acbf7590dfd60511
