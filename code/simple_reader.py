@@ -65,6 +65,7 @@ def pickle_tokenizer(collection):
 def extract_relevant_info(json_parsed_record, which_generator):
     features = json_parsed_record['features']['feature']
     video_id = base64.b64decode(features['video_id']['bytesList']['value'][0])
+    # video_id = features['video_id']['bytesList']['value'][0]
     try:
         labels = features['labels']['int64List']['value']
     except KeyError:
@@ -94,6 +95,7 @@ def generator(location, which_generator, batch_size):
         protobuf_records
     )
     i = 0
+    import pdb;pdb.set_trace()
     for j in range(len(protobuf_records) // batch_size):
         print(j, "out of", len(protobuf_records) // batch_size, "done")
         i %= batch_size
@@ -254,6 +256,3 @@ if __name__ == "__main__":
     gen = mongoDBgenerator(ds, d2v, 2, 1, 16)
     x, y = gen.next()
     print x.shape, y.shape
-
-
-

@@ -1,0 +1,23 @@
+<html>
+	<head>
+		<script src="static/form_submit.js"></script>
+		<title>IR Annotation Portal</title>
+		<meta charset="utf-8" HTTP-EQUIV="Pragma" CONTENT="no-cache">
+	</head>
+	<body>
+		<video autoplay width="320" height="240" src="{{video_name}}" controls id="video_player">
+		</video>
+		<br>
+		<ul>
+			{% for option in options %}
+			<li>
+				{{option}}
+				<input id="{{option}}" type="text" style="border-bottom: 1px solid black"/>
+			</li>
+			{% endfor %}
+		</ul>
+		<label id="ranking"></label>
+		<br>
+		<input type="button" value="Submit ranking" id="subrank"/>
+	</body>
+</html>
