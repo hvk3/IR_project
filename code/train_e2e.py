@@ -23,7 +23,7 @@ FLAGS = flags.FLAGS
 flags.DEFINE_boolean('test_demo', False, 'Test model on some examples?')
 flags.DEFINE_integer(
     'numComments',
-    3,
+    0,
     'Number of comments to be considered while building and training model'
 )
 flags.DEFINE_integer('batchSize', 16, 'Batch size')
@@ -35,11 +35,11 @@ flags.DEFINE_boolean(
     'Add batch normalization to model?'
 )
 flags.DEFINE_boolean('add_dropout', False, 'Add dropout to model?')
-flags.DEFINE_boolean('no_metadata', False, 'Ignore metadata in model?')
+flags.DEFINE_boolean('no_metadata', True, 'Ignore metadata in model?')
 flags.DEFINE_boolean('no_audio', False, 'Ignore audio in model?')
 flags.DEFINE_boolean('no_video', False, 'Ignore video in model?')
-flags.DEFINE_boolean('no_description', False, 'Ignore description in model?')
-flags.DEFINE_boolean('no_channel', False, 'Ignore channel name?')
+flags.DEFINE_boolean('no_description', True, 'Ignore description in model?')
+flags.DEFINE_boolean('no_channel', True, 'Ignore channel name?')
 flags.DEFINE_boolean(
     'vec2doc',
     False,
@@ -56,9 +56,11 @@ if __name__ == "__main__":
     embeddingSize = 400
     client = MongoClient()
     database = client.youtube8m
-    collection = database.iteration6
+    collection = database.iteration1
+    d2v = None
 
-    d2v = doc2vec.Doc2Vec.load('doc2vec_{}.model'.format(embeddingSize))
+    if FLAGS.numComments > 0 or (not FLAGS.no_description) or (not FLAGS.no_channel):
+        d2v = doc2vec.Doc2Vec.load('doc2vec_{}.model'.format(embeddingSize))
     vocab_size = 0
     max_len = 0
     if (FLAGS.vec2doc):

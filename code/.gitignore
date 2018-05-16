@@ -1,3 +1,4 @@
+doc2vec/*
 client_secrets.json
 *-oauth2.json
 *.npy

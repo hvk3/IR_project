@@ -1,0 +1,5 @@
+keras==2.1.1
+httplib2
+google-api-python-client
+pymongo
+gensim
