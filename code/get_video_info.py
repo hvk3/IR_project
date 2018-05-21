@@ -157,7 +157,4 @@ if __name__ == "__main__":
     youtube = get_authenticated_service(args)
     metadata = get_video_metadata(youtube, pseudoargs['videoid'])
     print metadata
-<<<<<<< HEAD
 
-=======
->>>>>>> 3940f13423ef9ec2f511d4b2acbf7590dfd60511

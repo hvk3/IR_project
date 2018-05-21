@@ -20,7 +20,7 @@ def render_video():
             idx = int(ast.literal_eval(request.form.keys()[0])['idx'])
         except IndexError:
             idx = 0
-    video_id_mappings = client['videos_1'].video_ids
+    video_id_mappings = client['videos_2'].video_ids
     videos = list(video_id_mappings.find())
     if (idx >= len(videos)):
         exit()
@@ -28,9 +28,9 @@ def render_video():
     filename = os.path.join('static', video['id'])
     titles = video['shuffled_titles']
     options = [string.ascii_lowercase[i] for i in xrange(len(titles))]
-    np.save('idx', idx)
+    np.save('idx_2', idx)
     html = render_template(
-        'index.html',
+        'index_2.html',
         video_name=filename,
         options=options,
         titles=titles
@@ -40,7 +40,7 @@ def render_video():
 
 @app.route('/update', methods=['POST'])
 def update():
-    video_id_mappings = client['videos_1'].video_ids
+    video_id_mappings = client['videos_2'].video_ids
     form = request.form
     jsonForm = json.loads(list(form)[0])
     reranked_options = [
@@ -74,7 +74,7 @@ def update():
         },
         upsert=True
     )
-    idx = np.load('idx.npy').item()
+    idx = np.load('idx_2.npy').item()
     return json.dumps({'idx': idx + 1})
 
 
@@ -84,5 +84,5 @@ def name():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, use_reloader=True, host='0.0.0.0')
+    app.run(debug=True, use_reloader=True, host='0.0.0.0',port=7569)
 

@@ -21,12 +21,7 @@ keras.backend.set_session(sess)
 # Define flags
 FLAGS = flags.FLAGS
 flags.DEFINE_boolean('test_demo', False, 'Test model on some examples?')
-flags.DEFINE_integer(
-    'numComments',
-    0,
-    'Number of comments to be considered while building and training model'
-)
-flags.DEFINE_integer('batchSize', 16, 'Batch size')
+flags.DEFINE_integer('batch_size', 16, 'Batch size')
 flags.DEFINE_integer('numEpochs', 3, 'Number of epochs')
 flags.DEFINE_integer('maxLen', 5, 'Max length for padding')
 flags.DEFINE_boolean(
@@ -35,11 +30,9 @@ flags.DEFINE_boolean(
     'Add batch normalization to model?'
 )
 flags.DEFINE_boolean('add_dropout', False, 'Add dropout to model?')
-flags.DEFINE_boolean('no_metadata', True, 'Ignore metadata in model?')
 flags.DEFINE_boolean('no_audio', False, 'Ignore audio in model?')
 flags.DEFINE_boolean('no_video', False, 'Ignore video in model?')
 flags.DEFINE_boolean('no_description', True, 'Ignore description in model?')
-flags.DEFINE_boolean('no_channel', True, 'Ignore channel name?')
 flags.DEFINE_boolean(
     'vec2doc',
     False,
@@ -53,64 +46,55 @@ def check_labels(y_train):
 
 
 if __name__ == "__main__":
-    embeddingSize = 400
+    embeddingSize = 300
     client = MongoClient()
     database = client.youtube8m
-    collection = database.iteration1
-    d2v = None
+    train_collection = database.train_split
+    test_collection = database.test_split
 
-    if FLAGS.numComments > 0 or (not FLAGS.no_description) or (not FLAGS.no_channel):
-        d2v = doc2vec.Doc2Vec.load('doc2vec_{}.model'.format(embeddingSize))
+    d2v = doc2vec.Doc2Vec.load('doc2vec/enwiki_dbow/doc2vec.bin')
     vocab_size = 0
     max_len = 0
     if (FLAGS.vec2doc):
         max_len = FLAGS.maxLen
     # Load data generator
-    dataGen = simple_reader.mongoDBgenerator(
-        collection,
+    trainDataGen = simple_reader.mongoDBgenerator(
+        train_collection,
         d2v,
-        FLAGS.numComments,
-        1,
-        FLAGS.batchSize,
+        FLAGS.batch_size,
         0.2,
         FLAGS.vec2doc,
         max_len
     )
-    # Ensure tokenizer works
-    _ = dataGen.next()
+    testDataGen = simple_reader.mongoDBgenerator(
+        test_collection,
+        d2v,
+        FLAGS.batch_size,
+        0,
+        FLAGS.vec2doc,
+        max_len,
+        False
+    )
+    # Ensuring function calls within generator work
+    _ = trainDataGen.next()
+    _ = testDataGen.next()
     if FLAGS.vec2doc:
         tokenizer = pickle.load(open('tokenizer.pickle', 'r'))
         # max_len = np.load('max_seq_length.npy').item()
         vocab_size = tokenizer.num_words
         del tokenizer
-    # Ensuring function calls within generator work
-    _ = dataGen.next()
     model = models.model(
         embeddingSize,
-        FLAGS.numComments,
         vocab_size,
         max_len,
         FLAGS.add_batch_norm,
         FLAGS.add_dropout,
         (not FLAGS.no_audio),
         (not FLAGS.no_video),
-        (not FLAGS.no_metadata),
-        (not FLAGS.no_channel),
         (not FLAGS.no_description)
     )
     # Visualize model
-    plot_model(model, to_file='model_arch.png')
-    # Load test generator
-    testGen = simple_reader.mongoDBgenerator(
-        collection,
-        d2v,
-        FLAGS.numComments,
-        3,
-        FLAGS.batchSize,
-        0.2,
-        FLAGS.vec2doc,
-        max_len
-    )
+    #plot_model(model, to_file='model_arch.png')
     # Train model
     early_stop = EarlyStopping(
         monitor='val_loss',
@@ -126,22 +110,22 @@ if __name__ == "__main__":
         verbose=1
     )
     if FLAGS.test_demo:
-        model = load_model("IR_demo_project.h5")
+        model = load_model("CIKM_model.h5")
     else:
         models.customTrain(
             model,
-            dataGen,
+            trainDataGen,
             FLAGS.numEpochs,
-            FLAGS.batchSize,
+            FLAGS.batch_size,
             valRatio=0.2,
             no_acc=True
         )
-        model.save("IR_demo_project.h5")
+        model.save("CIKM_model.h5")
     # Evaluate model on test data
     from scipy import spatial
     metric_computed = 0.0
     num_batches = 0
-    for tb in testGen:
+    for tb in testDataGen:
         if tb:
             num_batches += 1
             testBatch, chak = tb

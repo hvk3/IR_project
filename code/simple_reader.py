@@ -21,7 +21,7 @@ def get_titles(collection):
         # pdb.set_trace()
         titles = []
         for record in collection.find({}):
-            title = record['metadata']['metadata']['title']
+            title = record['metadata']['title']
             title = ''.join([i if ord(i) < 128 else '' for i in title])
             title = title.lower().strip()
             title = filter(lambda x: x not in string.punctuation, title)
@@ -137,12 +137,11 @@ def filled_metadata(metadata):
 def mongoDBgenerator(
     collection,
     d2vmodel,
-    numComments,
-    which,
     batch_size,
     validation_ratio,
     use_titles,
-    maxlen
+    maxlen,
+    is_train_data=True
 ):
     # print "Found {} records".format(collection.find({"which":which}).count())
     if (use_titles):
@@ -150,18 +149,11 @@ def mongoDBgenerator(
         vocab_size = tokenizer.num_words
         pruned_titles = set(np.load('titles.npy').tolist())
     while True:
-        X_metadata, X_audio, X_video, X_desc, X_channel =\
-            [[] for _ in xrange(5)]
-        X_comments = [[] for _ in range(numComments)]
+        X_audio, X_video, X_desc =\
+            [[] for _ in xrange(3)]
         Y = []
-        for record in collection.find({'which': which}):
-            metadata = record['metadata']['metadata']
-            metadata_stats = metadata['statistics']
-            if len(metadata['comments']) < numComments:
-                continue
-            metadata_records = filled_metadata(metadata_stats) +\
-                [metadata['categoryId']]
-            metadata_records = np.array([int(x) for x in metadata_records])
+        for record in collection.find():
+            metadata = record['metadata']
             if (not use_titles):
                 Y.append(d2vmodel.infer_vector(metadata['title'].split(' ')))
             else:
@@ -185,54 +177,36 @@ def mongoDBgenerator(
                     Y_
                 )))
                 del Y_
-            X_metadata.append(metadata_records)
-            # Add metadata to training data point
-            X_audio.append(record['avdata']['mean_audio'])
             # Add audio features
-            X_video.append(record['avdata']['mean_rgb'])
+            X_audio.append(record['mean_audio'])
             # Add video features
+            X_video.append(record['mean_rgb'])
+            # Add description based features
             X_desc.append(
                 d2vmodel.infer_vector(metadata['description'].split(' '))
             )
-            # Add description features
-            selectedComments = rankAndSelectComments(
-                metadata['comments'],
-                numComments
-            )
-            for j in range(numComments):
-                X_comments[j].append(
-                    d2vmodel.infer_vector(selectedComments[j].split(' '))
-                )
-            # Add comment based features
-            X_channel.append(
-                d2vmodel.infer_vector(metadata['channelTitle'].split(' '))
-            )
-            # Add channel title features
-            if len(X_channel) == batch_size:
+            #print(d2vmodel.infer_vector(metadata['description'].split(' '))).shape
+            if len(X_desc) == batch_size:
                 X = [
-                    np.array(X_metadata),
                     np.array(X_audio),
                     np.array(X_video),
                     np.array(X_desc)
                 ]
                 # Return all data from generator, handle in model
-                X += [np.array(commentVec) for commentVec in X_comments]
-                # if (use_channel):
-                X.append(np.array(X_channel))
                 Y = np.array(Y)
                 if use_titles:
                     Y = np.squeeze(Y, axis=1)
                 # Split into train and validation if training
-                if which == 1:
+                if is_train_data == True:
                     splitPoint = int(validation_ratio * len(Y))
                     X_train = [x[splitPoint:] for x in X]
                     X_val = [x[:splitPoint] for x in X]
                     yield (X_train, Y[splitPoint:]), (X_val, Y[:splitPoint])
                 else:
-                    yield (X, Y), (record['metadata']['_id'], metadata['title'])
-                X_metadata, X_audio, X_video, X_desc, X_channel =\
-                    [[] for _ in xrange(5)]
-                Y, X_comments = [], [[] for _ in range(numComments)]
+                    yield (X, Y), (record['_id'], metadata['title'])
+                X_audio, X_video, X_desc =\
+                    [[] for _ in xrange(3)]
+                Y = []
         # Don't loop indefinitely if test data
         if which != 1:
             break
@@ -246,13 +220,3 @@ def getTrainValGens(sourceGen, train=True):
         for tuple in sourceGen:
             yield tuple[1]
 
-
-if __name__ == "__main__":
-    from pymongo import MongoClient
-    client = MongoClient()
-    db = client.youtube8m
-    ds = db.iteration2
-    d2v = doc2vec.Doc2Vec.load('doc2vec_100.model')
-    gen = mongoDBgenerator(ds, d2v, 2, 1, 16)
-    x, y = gen.next()
-    print x.shape, y.shape

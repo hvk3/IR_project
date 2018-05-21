@@ -47,7 +47,6 @@ class Attention(Layer):
         Note: The layer has been tested with Keras 1.x
 
         Example:
-        
             # 1
             model.add(LSTM(64, return_sequences=True))
             model.add(Attention())
@@ -237,19 +236,7 @@ def model(EMBEDDING_SIZE,
           dropout=False,
           use_audio=True,
           use_video=True,
-          use_metadata=True,
-          use_channel=True,
           use_description=True):
-    # Metadata based inputs
-    input_metadata = Input(shape=(6,))
-    dense1_metadata = Dense(64, activation='relu')(input_metadata)
-    dense2_metadata = Dense(32, activation='relu')(dense1_metadata)
-    if (batch_norm):
-        dense2_metadata = BatchNormalization()(dense2_metadata)
-    # Make output empty (all 0s)
-    if (not use_metadata):
-        dense2_metadata = Dropout(1)(dense2_metadata)
-
     # Raw audio/video based features
     input_audio = Input(shape=(128,))
     dense1_audio = Dense(512, activation='relu')(input_audio)
@@ -271,11 +258,6 @@ def model(EMBEDDING_SIZE,
 
     # Text-based features
     input_description = Input(shape=(EMBEDDING_SIZE,))
-    input_comments = [
-        Input(shape=(EMBEDDING_SIZE,)) for _ in xrange(NUM_COMMENTS)
-    ]
-    concat_input_comments = Concatenate()(input_comments)
-    input_channelName = Input(shape=(EMBEDDING_SIZE,))
 
     dense1_description = Dense(
         EMBEDDING_SIZE / 2,
@@ -285,35 +267,12 @@ def model(EMBEDDING_SIZE,
         dense1_description = BatchNormalization()(dense1_description)
     if (not use_description):
         dense1_description = Dropout(1)(dense1_description)
-    dense1_comments = Dense(
-        NUM_COMMENTS / 2 * EMBEDDING_SIZE / 2,
-        activation='relu'
-    )(concat_input_comments)
-    if (batch_norm):
-        dense1_comments = BatchNormalization()(dense1_comments)
-    if (NUM_COMMENTS == 0):
-        dense1_comments = Dropout(1)(dense1_comments)
-    dense1_channelName = Dense(
-        EMBEDDING_SIZE / 2,
-        activation='relu'
-    )(input_channelName)
-    if (batch_norm):
-        dense1_channelName = BatchNormalization()(dense1_channelName)
-    if (not use_channel):
-        dense1_channelName = Dropout(1)(dense1_channelName)
-    input_alltextual = Concatenate()([
-        dense1_description,
-        dense1_comments,
-        dense1_channelName
-    ])
     dense2_alltextual = Dense(
-        (NUM_COMMENTS * EMBEDDING_SIZE) / 16
-    )(input_alltextual)
+        EMBEDDING_SIZE / 4
+    )(dense1_description)
     if (batch_norm):
         dense2_alltextual = BatchNormalization()(dense2_alltextual)
-
     dense4_allinputs = Concatenate()([
-        dense2_metadata,
         dense3_audiovideo,
         dense2_alltextual
     ])
@@ -359,11 +318,10 @@ def model(EMBEDDING_SIZE,
         # )(l_attn_sent)
 
     model_inputs = [
-        input_metadata,
         input_audio,
         input_video,
         input_description
-    ] + input_comments + [input_channelName]
+    ]
     model = Model(inputs=model_inputs, outputs=model_output)
 
     if (seqLength > 0):
@@ -392,17 +350,6 @@ def customTrain(model, dataGen, epochs, batch_size, valRatio=0.2, no_acc=False):
                 train_acc += train_metrics[1]
             val_metrics = model.test_on_batch(x_test, y_test)
             y_predicted = model.predict_on_batch(x_train)
-            #for j in xrange(y_predicted.shape[0]):
-            #    for k in xrange(y_predicted.shape[1]):
-                    # print 'Predicted label:', np.argmax(y_predicted[i][j])
-                    # print 'Actual label:', np.argmax(y_test[i][j])
-            #        sys.stdout.write('Predicted label: {}\t'.format(
-            #            np.argmax(y_predicted[j][k])
-            #        ))
-            #        sys.stdout.write('Actual label: {}\n'.format(
-            #            np.argmax(y_train[j][k])
-            #        ))
-                    # sys.stdout.flush()
             if no_acc:
                 val_loss += val_metrics
             else:

@@ -4,14 +4,15 @@ import base64
 import numpy as np
 import os
 import tensorflow as tf
+
 from google.protobuf.json_format import MessageToJson
+from tqdm import tqdm
 
-LOC = '/home/anshuman14021/IR_Project/data/yt8m_video_level'
-
+LOC = '/home/anshuman14021/IR_project/data/yt8m_video_level'
 client = pymongo.MongoClient() # defaults to port 27017
 db = client.youtube8m
-ds = db.iteration1
-
+ds = db.av_features
+ref_ds = db.iteration3
 
 def extract_relevant_info(json_parsed_record):
         video_id = json_parsed_record['features']['feature']['video_id']['bytesList']['value'][0]
@@ -26,7 +27,8 @@ def extract_relevant_info(json_parsed_record):
         }
         return parsed_record
 
-def generator(which_generator, batch_size):
+
+def generator(which_generator):
         global LOC
 
         protobuf_records = filter(lambda x: 'tfrecord' in x, os.listdir(LOC))
@@ -37,31 +39,20 @@ def generator(which_generator, batch_size):
         elif (which_generator == 3):
                 protobuf_records = filter(lambda x: 'validate' in x, protobuf_records)
         protobuf_records = map(lambda x: os.path.join(LOC, x), protobuf_records)
-        i = 0
 
-        while True:
-                i %= batch_size
-                json_parsed_records = []
-                for record in protobuf_records[i * batch_size : (i + 1) * batch_size]:
-                        for record_ in tf.python_io.tf_record_iterator(record):
-                                json_parsed_record = json.loads(MessageToJson(tf.train.Example.FromString(record_)))
-
-                                videoId = base64.b64decode(extract_relevant_info(json_parsed_record)['video_id'])
-                                if not ds.find({'_id': videoId}).count():
-                                    #print " not in mongo db "
-                                     pass
-                                else:
-                                    json_parsed_records.append(extract_relevant_info(json_parsed_record))
-                i += 1
-                if (len(json_parsed_records) == 0):
-                        continue
-                yield np.array(json_parsed_records)
-
+        for record in tqdm(protobuf_records):
+            for record_ in tf.python_io.tf_record_iterator(record):
+                json_parsed_record = json.loads(MessageToJson(tf.train.Example.FromString(record_)))
+                json_stuff = extract_relevant_info(json_parsed_record)
+                videoId = base64.b64decode(extract_relevant_info(json_parsed_record)['video_id'])
+                if ref_ds.find_one({'_id': videoId}):
+                    ds.insert_one({
+                        '_id': videoId,
+                        'mean_audio': json_stuff['mean_audio'],
+                        'mean_rgb': json_stuff['mean_rgb']})
+                #print(ds.find_one({'_id': videoId})['mean_audio'])
+                #print(videoId)
 
 if __name__ == "__main__":
-
-        gen = generator(1, 1)
-        arr = gen.next()
-
-	# print the number of documents in a collection
-	print db.iteration1.count()
+    ds.remove()
+    generator(1)

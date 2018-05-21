@@ -1,5 +1,6 @@
 document.addEventListener('DOMContentLoaded', function(){
-	var baseURL = 'http://192.168.2.212:5000/'
+	var baseURL = 'http://'+window.location.hostname+':'+window.location.port+'/'
+	document.getElementById('video_player').playbackRate = 2;
 	document.getElementById("subrank").addEventListener(
 		"click",
 		function(event){
