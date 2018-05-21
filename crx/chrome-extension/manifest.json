@@ -1,0 +1,33 @@
+{
+  "manifest_version": 2,
+  "name": "RoTSV",
+  "description": "A Robust Title Scoring System for Youtube Videos",
+  "version": "1.0",
+  "browser_action": {
+    "default_popup": "html/popup.html"
+  },
+  "background": {
+    "scripts": ["js/background.js", "js/api.js"],
+    "persistent": true
+  },
+  "content_scripts":
+    [
+        {
+            "matches": [ "*://www.youtube.com/*" ],
+            "js":["js/jquery-3.0.0.min.js", "js/sweetalert.min.js" ,"js/popup.js"],
+            "css" : ["html/sweetalert.css"]
+        }
+    ],
+  "icons": { "16": "icons/icon16.png",
+           "48": "icons/icon48.png",
+          "128": "icons/icon128.png" 
+    },
+  "web_accessible_resources": ["icons/icon16.png", "icons/1.png", "icons/2.png", "icons/3.png",
+  "icons/4.png", "icons/5.png"],
+  "permissions": [
+    "*://www.youtube.com/*" , "tabs", "storage", "https://82fcc59b.ngrok.io/*"
+  ],
+  "externally_connectable" : {
+    "matches": [ "*://www.youtube.com/*" ]
+  }
+}
