@@ -3,3 +3,5 @@ data/*
 dummydata/*
 clickbait-detector-master/*
 anno/*
+yt8m/*
+.ipynb_checkpoints/*
